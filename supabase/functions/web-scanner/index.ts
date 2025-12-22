@@ -1,5 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { PDFDocument, PDFPage, rgb } from "npm:pdf-lib";
+import PdfPng from "npm:pdf-lib/cjs/core/embedders/PngEmbedder.js";
 
 // Type definitions for scan results (duplicated from src/types/scan.ts for Deno compatibility)
 type PerformanceResults = {
@@ -175,6 +177,29 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
 
     console.log(`Overall score: ${overallScore}, top issues: ${topIssues.length}`);
 
+    // Extract OG image
+    let ogImage: string | null = null;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; RobolabScanner/1.0)",
+        },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      
+      if (response.ok) {
+        const html = await response.text();
+        ogImage = extractOGImage(html, url);
+        if (ogImage) console.log(`OG image found: ${ogImage}`);
+      }
+    } catch (ogError) {
+      console.log("Failed to extract OG image:", ogError);
+    }
+
     let aiSummary = null;
     let aiRecommendations = [];
 
@@ -188,6 +213,43 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
       console.error("AI analysis failed:", aiError);
     }
 
+    // Generate section-specific explanations
+    const generateSectionExplanation = (section: string, data: any): string => {
+      const explanations: Record<string, string> = {
+        performance: `Performance Score (${performanceScore}/100): This measures how efficiently your website loads and responds. ` +
+          `Load time: ${scanResults.performance?.load_time_ms}ms, Page size: ${scanResults.performance?.page_size_kb}KB. ` +
+          `${performanceScore >= 80 ? "Excellent performance - your site loads very quickly." : 
+            performanceScore >= 60 ? "Good performance - consider optimizing images and scripts." :
+            "Performance needs improvement - implement caching and code splitting."}`,
+        
+        security: `Security Score (${scanResults.security?.score || 0}/100): This evaluates your website's security posture. ` +
+          `Security checks passed: ${securityChecksPassed}/7. ` +
+          `${securityIssues.length > 0 ? `Found ${securityIssues.length} security issues that should be addressed immediately.` :
+            "No major security issues detected - good security practices implemented."}`,
+        
+        accessibility: `Accessibility Score (${scanResults.accessibility?.score || 0}/100): This measures how accessible your site is to all users, ` +
+          `including those with disabilities. Total issues found: ${accessibilityIssueCount}. ` +
+          `${accessibilityIssueCount > 10 ? "Multiple accessibility issues need urgent attention." :
+            accessibilityIssueCount > 0 ? "Some accessibility improvements recommended." :
+            "Good accessibility standards implemented."}`,
+        
+        seo: `SEO Score (${seoScore}/100): This evaluates search engine optimization factors like meta tags, headings, and mobile friendliness. ` +
+          `${seoScore >= 80 ? "Excellent SEO - your site should rank well in search results." :
+            seoScore >= 60 ? "Good SEO foundation - focus on content quality and backlinks." :
+            "SEO needs significant improvement - implement proper meta tags and structured data."}`,
+        
+        e2e: `End-to-End Testing: Detected ${scanResults.e2e?.buttons_found || 0} buttons, ${scanResults.e2e?.links_found || 0} links, ` +
+          `and ${scanResults.e2e?.forms_found || 0} forms. ` +
+          `${(scanResults.e2e?.buttons_found || 0) + (scanResults.e2e?.links_found || 0) + (scanResults.e2e?.forms_found || 0) > 50 ? 
+            "Your site has rich interactive content." : "Consider adding more interactive elements."}`,
+        
+        technologies: `Detected ${technologies.length} technologies including frameworks, libraries, and platforms. ` +
+          `${technologies.length > 0 ? `Primary stack: ${technologies.slice(0, 3).join(", ")}.` : ""} ` +
+          `Technology stack influences performance, security, and maintainability.`,
+      };
+      return explanations[section] || "No explanation available for this section.";
+    };
+
     const performanceScore = scanResults.performance?.score || scanResults.performance?.lighthouse_scores?.performance || 0;
     const seoScore = scanResults.performance?.lighthouse_scores?.seo || 0;
     const accessibilityIssueCount = scanResults.accessibility?.total_issues || 0;
@@ -195,6 +257,1101 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
     const securityChecksPassed = Math.max(0, 7 - securityIssues.length);
     const technologies = scanResults.techStack?.detected?.map((t) => t.name) || [];
     const exposedEndpoints = scanResults.api?.endpoints?.map((e) => e.path) || [];
+
+    // Generate Professional Multi-Page PDF
+    let pdfBase64: string | null = null;
+    try {
+      console.log("Generating comprehensive PDF...");
+      const pdfDoc = await PDFDocument.create();
+      const { width: pageWidth, height: pageHeight } = { width: 595, height: 842 };
+      
+      const scoreColor = (score: number) => {
+        if (score >= 80) return rgb(0.1, 0.6, 0.2);
+        if (score >= 60) return rgb(1, 0.7, 0);
+        return rgb(0.8, 0.1, 0.1);
+      };
+      
+      const wrapText = (text: string, maxWidth: number = 450, fontSize: number = 9): string[] => {
+        if (!text) return [];
+        const words = text.split(' ');
+        const lines: string[] = [];
+        let currentLine = '';
+        
+        for (const word of words) {
+          const testLine = currentLine + (currentLine ? ' ' : '') + word;
+          if (testLine.length * (fontSize * 0.6) > maxWidth && currentLine) {
+            lines.push(currentLine);
+            currentLine = word;
+          } else {
+            currentLine = testLine;
+          }
+        }
+        if (currentLine) lines.push(currentLine);
+        return lines;
+      };
+      
+      const drawPageHeader = (page: any, title: string, pageNum: number) => {
+        // Dark blue header
+        page.drawRectangle({
+          x: 0,
+          y: pageHeight - 80,
+          width: pageWidth,
+          height: 80,
+          color: rgb(0.05, 0.15, 0.35),
+        
+        // RoboLab(R) text logo in header
+        page.drawText("RoboLab(R)", {
+          x: 40,
+          y: pageHeight - 42,
+          size: 20,
+          color: rgb(1, 1, 1),
+        });
+        
+        // Title
+        page.drawText(title, {
+          x: 260,
+          y: pageHeight - 40,
+          size: 14,
+          color: rgb(1, 1, 1),
+        });
+        
+        // Page number
+        page.drawText(`Page ${pageNum}`, {
+          x: pageWidth - 80,
+          y: pageHeight - 40,
+          size: 10,
+          color: rgb(0.8, 0.8, 0.8),
+        });
+        
+        // Footer line
+        page.drawRectangle({
+          x: 0,
+          y: 50,
+          width: pageWidth,
+          height: 0.5,
+          color: rgb(0.8, 0.8, 0.8),
+        });
+        
+        // Footer logo with RoboLab(R) text
+        page.drawText("RoboLab(R)", {
+          x: 40,
+          y: 30,
+          size: 11,
+          color: rgb(0.05, 0.15, 0.35),
+        });
+        
+        // Footer text
+        page.drawText("Robo-Lab Web Scanner - Professional Security & Performance Analysis", {
+          x: 250,
+          y: 30,
+          size: 8,
+          color: rgb(0.6, 0.6, 0.6),
+        });
+      };
+      
+      const score = overallScore;
+      let pageNum = 1;
+      
+      // PAGE 1: EXECUTIVE SUMMARY
+      const page1 = pdfDoc.addPage([pageWidth, pageHeight]);
+      
+      // Main title at top
+      page1.drawText("Web Scanner Full Report", {
+        x: 40,
+        y: pageHeight - 50,
+        size: 28,
+        color: rgb(0.05, 0.15, 0.35),
+      });
+      
+      page1.drawText("Comprehensive Security & Performance Analysis", {
+        x: 40,
+        y: pageHeight - 75,
+        size: 12,
+        color: rgb(0.3, 0.3, 0.3),
+      });
+      
+      let y = pageHeight - 110;
+      
+      // Website info box
+      page1.drawRectangle({
+        x: 40,
+        y: y - 50,
+        width: 515,
+        height: 50,
+        color: rgb(0.95, 0.98, 1),
+        borderColor: rgb(0.3, 0.3, 0.5),
+        borderWidth: 1,
+      });
+      
+      page1.drawText("URL Analyzed:", {
+        x: 60,
+        y: y - 20,
+        size: 10,
+        color: rgb(0.3, 0.3, 0.3),
+      });
+      
+      const urlDisplay = url.length > 70 ? url.substring(0, 67) + "..." : url;
+      page1.drawText(urlDisplay, {
+        x: 60,
+        y: y - 35,
+        size: 9,
+        color: rgb(0, 0, 0.7),
+      });
+      
+      y -= 50;
+      page1.drawText(`Scan Date: ${new Date().toLocaleString()}`, {
+        x: 40,
+        y: y,
+        size: 9,
+        color: rgb(0.2, 0.2, 0.2),
+      });
+      
+      y -= 25;
+      
+      // Overall Score - Reduced Size
+      page1.drawRectangle({
+        x: 40,
+        y: y - 80,
+        width: 515,
+        height: 80,
+        color: rgb(0.98, 0.98, 1),
+        borderColor: scoreColor(score),
+        borderWidth: 3,
+      });
+      
+      page1.drawText("OVERALL SCORE", {
+        x: 60,
+        y: y - 30,
+        size: 11,
+        color: rgb(0.05, 0.15, 0.35),
+      });
+      
+      page1.drawText(`${score}`, {
+        x: 380,
+        y: y - 60,
+        size: 48,
+        color: scoreColor(score),
+      });
+      
+      page1.drawText("/100", {
+        x: 450,
+        y: y - 52,
+        size: 14,
+        color: rgb(0.3, 0.3, 0.3),
+      });
+      
+      const statusText = score >= 80 ? "Excellent" : score >= 60 ? "Good" : score >= 40 ? "Fair" : "Poor";
+      page1.drawText(statusText, {
+        x: 60,
+        y: y - 60,
+        size: 14,
+        color: scoreColor(score),
+      });
+      
+      y -= 110;
+      
+      // Quick Metrics
+      page1.drawText("Quick Metrics", {
+        x: 40,
+        y: y,
+        size: 12,
+        color: rgb(0.05, 0.15, 0.35),
+      });
+      y -= 20;
+      
+      const metrics = [
+        { label: "Performance Score", value: `${performanceScore}/100` },
+        { label: "SEO Score", value: `${seoScore}/100` },
+        { label: "Security Checks", value: `${securityChecksPassed}/7 passed` },
+        { label: "Accessibility Issues", value: `${accessibilityIssueCount}` },
+      ];
+      
+      for (const m of metrics) {
+        page1.drawRectangle({
+          x: 40,
+          y: y - 20,
+          width: 515,
+          height: 20,
+          color: rgb(0.98, 0.98, 1),
+          borderColor: rgb(0.7, 0.7, 0.9),
+          borderWidth: 0.5,
+        });
+        
+        page1.drawText(m.label, {
+          x: 60,
+          y: y - 12,
+          size: 9,
+          color: rgb(0.3, 0.3, 0.3),
+        });
+        
+        page1.drawText(m.value, {
+          x: 400,
+          y: y - 12,
+          size: 9,
+          color: rgb(0.05, 0.15, 0.35),
+        });
+        
+        y -= 25;
+      }
+      
+      // PAGE 2: SCAN RESULTS METRICS OVERVIEW
+      const page2 = pdfDoc.addPage([pageWidth, pageHeight]);
+      drawPageHeader(page2, "Scan Results Overview", pageNum++);
+      y = pageHeight - 100;
+      
+      page2.drawText("Website Performance Metrics", {
+        x: 40,
+        y: y,
+        size: 12,
+        color: rgb(0.1, 0.3, 0.6),
+      });
+      y -= 28;
+      
+      const metricCards = [
+        {
+          label: "Performance Score",
+          value: performanceScore,
+          desc: "Lighthouse Mobile Score",
+          color: scoreColor(performanceScore),
+        },
+        {
+          label: "SEO Score",
+          value: seoScore,
+          desc: "Overall SEO Score",
+          color: scoreColor(seoScore),
+        },
+        {
+          label: "Accessibility",
+          value: scanResults.accessibility?.total_issues || 0,
+          desc: "Critical & Serious Issues",
+          color: (scanResults.accessibility?.total_issues || 0) > 10 ? rgb(0.8, 0.1, 0.1) : rgb(0.1, 0.6, 0.2),
+        },
+        {
+          label: "Security",
+          value: scanResults.security?.checks_passed || 0,
+          desc: "Security Checks Passed",
+          color: rgb(0.1, 0.6, 0.2),
+        },
+        {
+          label: "E2E Testing",
+          value: (scanResults.e2e?.buttons_found || 0) + (scanResults.e2e?.links_found || 0) + (scanResults.e2e?.forms_found || 0),
+          desc: "Interactive Elements Total",
+          color: rgb(0.5, 0.2, 0.8),
+        },
+      ];
+      
+      let cardX = 40;
+      let cardY = y;
+      let cardCol = 0;
+      
+      for (const metric of metricCards) {
+        const cardWidth = 98;
+        const cardHeight = 85;
+        
+        if (cardCol > 4) {
+          cardCol = 0;
+          cardX = 40;
+          cardY -= 95;
+        }
+        
+        // Card background
+        page2.drawRectangle({
+          x: cardX,
+          y: cardY - cardHeight,
+          width: cardWidth,
+          height: cardHeight,
+          color: rgb(0.98, 0.98, 1),
+          borderColor: metric.color,
+          borderWidth: 2,
+        });
+        
+        // Value
+        page2.drawText(String(metric.value), {
+          x: cardX + 5,
+          y: cardY - 35,
+          size: 18,
+          color: metric.color,
+        });
+        
+        // Label
+        page2.drawText(metric.label, {
+          x: cardX + 5,
+          y: cardY - 52,
+          size: 8,
+          color: rgb(0.1, 0.1, 0.1),
+        });
+        
+        // Description
+        page2.drawText(metric.desc, {
+          x: cardX + 5,
+          y: cardY - 65,
+          size: 7,
+          color: rgb(0.3, 0.3, 0.3),
+        });
+        
+        cardX += 103;
+        cardCol++;
+      }
+      
+      // Add explanations section below cards in separate box
+      y = cardY - 120;
+      
+      // Explanation box background
+      page2.drawRectangle({
+        x: 40,
+        y: y - 75,
+        width: 515,
+        height: 70,
+        color: rgb(0.98, 0.99, 1),
+        borderColor: rgb(0.05, 0.15, 0.35),
+        borderWidth: 2,
+      });
+      
+      // Title with darker color for readability
+      page2.drawText("What do these scores mean?", {
+        x: 55,
+        y: y - 10,
+        size: 12,
+        color: rgb(0.05, 0.15, 0.35),
+      });
+      
+      // Explanation text with dark color
+      const expText = "Performance: Load speed & responsiveness | SEO: Search engine visibility | Accessibility: Usability for all users | Security: Protection level | E2E: Interactive elements";
+      const expLines = wrapText(expText, 475, 8);
+      
+      let expY = y - 28;
+      for (const line of expLines.slice(0, 3)) {
+        page2.drawText(line, {
+          x: 55,
+          y: expY,
+          size: 8,
+          color: rgb(0.15, 0.15, 0.15),
+        });
+        expY -= 12;
+      }
+      
+      // PAGE 3: DETAILED SCAN RESULTS
+      const page3 = pdfDoc.addPage([pageWidth, pageHeight]);
+      drawPageHeader(page3, "Detailed Scan Results", pageNum++);
+      y = pageHeight - 100;
+      
+      // Top Issues
+      if (topIssues && topIssues.length > 0) {
+        page3.drawText(`Top Issues Found (${topIssues.length})`, {
+          x: 40,
+          y: y,
+          size: 12,
+          color: rgb(0.8, 0.1, 0.1),
+        });
+        y -= 20;
+        
+        for (const issue of topIssues.slice(0, 10)) {
+          if (y < 60) break;
+          
+          const severity = issue.severity || 'medium';
+          const sevColor = severity === 'critical' ? rgb(0.9, 0, 0) :
+                         severity === 'high' ? rgb(1, 0.4, 0) :
+                         severity === 'medium' ? rgb(1, 0.7, 0) :
+                         rgb(0.5, 0.5, 0.5);
+          
+          page3.drawRectangle({
+            x: 40,
+            y: y - 25,
+            width: 515,
+            height: 25,
+            color: rgb(1, 0.98, 0.98),
+            borderColor: sevColor,
+            borderWidth: 1,
+          });
+          
+          page3.drawText(`[${severity.toUpperCase()}] ${issue.category}`, {
+            x: 60,
+            y: y - 10,
+            size: 9,
+            color: sevColor,
+          });
+          
+          const desc = issue.description.substring(0, 75);
+          page3.drawText(desc, {
+            x: 60,
+            y: y - 18,
+            size: 8,
+            color: rgb(0.2, 0.2, 0.2),
+          });
+          
+          y -= 30;
+        }
+      }
+      
+      // PAGE 4: SECURITY & PERFORMANCE DETAILED
+      const page4 = pdfDoc.addPage([pageWidth, pageHeight]);
+      drawPageHeader(page4, "Security & Performance", pageNum++);
+      y = pageHeight - 100;
+      
+      // Security Section
+      page4.drawText("Security Analysis", {
+        x: 40,
+        y: y,
+        size: 12,
+        color: rgb(0.8, 0.1, 0.1),
+      });
+      y -= 20;
+      
+      page4.drawRectangle({
+        x: 40,
+        y: y - 45,
+        width: 515,
+        height: 45,
+        color: rgb(0.98, 0.98, 1),
+        borderColor: rgb(0.3, 0.3, 0.5),
+        borderWidth: 1,
+      });
+      
+      page4.drawText(`Security Checks Passed: ${securityChecksPassed}/7`, {
+        x: 60,
+        y: y - 12,
+        size: 10,
+        color: rgb(0.2, 0.2, 0.2),
+      });
+      
+      if (scanResults.security?.issues && scanResults.security.issues.length > 0) {
+        page4.drawText(`Issues Found: ${scanResults.security.issues.length}`, {
+          x: 60,
+          y: y - 25,
+          size: 9,
+          color: rgb(0.8, 0.1, 0.1),
+        });
+      } else {
+        page4.drawText("No major security issues detected [OK]", {
+          x: 60,
+          y: y - 25,
+          size: 9,
+          color: rgb(0.1, 0.5, 0.1),
+        });
+      }
+      
+      y -= 70;
+      
+      // Performance Section
+      page4.drawText("Performance Analysis", {
+        x: 40,
+        y: y,
+        size: 12,
+        color: rgb(0.1, 0.5, 0.1),
+      });
+      y -= 20;
+      
+      if (scanResults.performance?.core_web_vitals) {
+        const cwv = scanResults.performance.core_web_vitals;
+        const perfMetrics = [
+          { label: "FCP (First Contentful Paint)", value: `${((cwv.fcp || 0) / 1000).toFixed(2)}s` },
+          { label: "LCP (Largest Contentful Paint)", value: `${((cwv.lcp || 0) / 1000).toFixed(2)}s` },
+          { label: "CLS (Cumulative Layout Shift)", value: `${(cwv.cls || 0).toFixed(3)}` },
+        ];
+        
+        for (const metric of perfMetrics) {
+          page4.drawRectangle({
+            x: 40,
+            y: y - 18,
+            width: 515,
+            height: 18,
+            color: rgb(0.98, 0.98, 1),
+            borderColor: rgb(0.7, 0.7, 0.9),
+            borderWidth: 0.5,
+          });
+          
+          page4.drawText(metric.label, {
+            x: 60,
+            y: y - 10,
+            size: 8,
+            color: rgb(0.2, 0.2, 0.2),
+          });
+          
+          page4.drawText(metric.value, {
+            x: 420,
+            y: y - 10,
+            size: 8,
+            color: rgb(0.05, 0.15, 0.35),
+          });
+          
+          y -= 22;
+        }
+      }
+      
+      // Performance Results
+      page4.drawText("Load Time", {
+        x: 40,
+        y: y,
+        size: 10,
+        color: rgb(0.2, 0.2, 0.2),
+      });
+      page4.drawText(`${scanResults.performance?.load_time_ms || 'N/A'}ms`, {
+        x: 400,
+        y: y,
+        size: 10,
+        color: rgb(0.05, 0.15, 0.35),
+      });
+      y -= 18;
+      
+      page4.drawText("Page Size", {
+        x: 40,
+        y: y,
+        size: 10,
+        color: rgb(0.2, 0.2, 0.2),
+      });
+      page4.drawText(`${scanResults.performance?.page_size_kb || 'N/A'}KB`, {
+        x: 400,
+        y: y,
+        size: 10,
+        color: rgb(0.05, 0.15, 0.35),
+      });
+      y -= 20;
+      
+      // PAGE 5: ACCESSIBILITY & TECHNOLOGIES
+      const page5 = pdfDoc.addPage([pageWidth, pageHeight]);
+      drawPageHeader(page5, "Accessibility & Technologies", pageNum++);
+      y = pageHeight - 100;
+      
+      // Accessibility
+      page5.drawText("Accessibility Analysis", {
+        x: 40,
+        y: y,
+        size: 12,
+        color: rgb(0.8, 0.4, 0),
+      });
+      y -= 20;
+      
+      const a11yScore = scanResults.accessibility?.score || 0;
+      page5.drawRectangle({
+        x: 40,
+        y: y - 45,
+        width: 515,
+        height: 45,
+        color: rgb(0.98, 0.98, 1),
+        borderColor: rgb(0.8, 0.4, 0),
+        borderWidth: 1,
+      });
+      
+      page5.drawText(`Score: ${a11yScore}/100`, {
+        x: 60,
+        y: y - 12,
+        size: 10,
+        color: rgb(0.2, 0.2, 0.2),
+      });
+      
+      page5.drawText(`Total Issues: ${accessibilityIssueCount}`, {
+        x: 60,
+        y: y - 25,
+        size: 9,
+        color: scoreColor(a11yScore),
+      });
+      
+      y -= 70;
+      
+      // Technologies
+      if (technologies.length > 0) {
+        page5.drawText("Detected Technologies", {
+          x: 40,
+          y: y,
+          size: 12,
+          color: rgb(0.05, 0.15, 0.35),
+        });
+        y -= 18;
+        
+        const techList = technologies.slice(0, 15).join(" | ");
+        const techLines = wrapText(techList, 470, 8);
+        
+        page5.drawRectangle({
+          x: 40,
+          y: y - (techLines.length * 12 + 10),
+          width: 515,
+          height: techLines.length * 12 + 10,
+          color: rgb(0.98, 0.98, 1),
+          borderColor: rgb(0.7, 0.7, 0.9),
+          borderWidth: 0.5,
+        });
+        
+        for (const line of techLines) {
+          page5.drawText(line, {
+            x: 60,
+            y: y,
+            size: 8,
+            color: rgb(0.2, 0.2, 0.2),
+          });
+          y -= 12;
+        }
+      }
+      
+      y -= 20;
+      
+      // E2E Testing
+      if (scanResults.e2e?.buttons_found || scanResults.e2e?.links_found || scanResults.e2e?.forms_found) {
+        page5.drawText("End-to-End Testing", {
+          x: 40,
+          y: y,
+          size: 12,
+          color: rgb(0.05, 0.15, 0.35),
+        });
+        y -= 18;
+        
+        page5.drawText(`Buttons Found: ${scanResults.e2e.buttons_found || 0}`, {
+          x: 60,
+          y: y,
+          size: 9,
+          color: rgb(0.2, 0.2, 0.2),
+        });
+        y -= 12;
+        
+        page5.drawText(`Links Found: ${scanResults.e2e.links_found || 0}`, {
+          x: 60,
+          y: y,
+          size: 9,
+          color: rgb(0.2, 0.2, 0.2),
+        });
+        y -= 12;
+        
+        page5.drawText(`Forms Found: ${scanResults.e2e.forms_found || 0}`, {
+          x: 60,
+          y: y,
+          size: 9,
+          color: rgb(0.2, 0.2, 0.2),
+        });
+      }
+      
+      // PAGE 6: CORE WEB VITALS (DETAILED)
+      if (scanResults.performance?.core_web_vitals) {
+        const page6 = pdfDoc.addPage([pageWidth, pageHeight]);
+        drawPageHeader(page6, "Core Web Vitals", pageNum++);
+        y = pageHeight - 100;
+        
+        page6.drawText("Powered by Google PageSpeed Insights", {
+          x: 40,
+          y: y,
+          size: 11,
+          color: rgb(0.2, 0.5, 0.2),
+        });
+        y -= 25;
+        
+        const cwv = scanResults.performance.core_web_vitals;
+        const vitalMetrics = [
+          { label: "First Contentful Paint (FCP)", value: `${((cwv.fcp || 0) / 1000).toFixed(2)}s`, desc: "How quickly content appears" },
+          { label: "Largest Contentful Paint (LCP)", value: `${((cwv.lcp || 0) / 1000).toFixed(2)}s`, desc: "Main content load time" },
+          { label: "Cumulative Layout Shift (CLS)", value: `${(cwv.cls || 0).toFixed(3)}`, desc: "Visual stability score" },
+          { label: "Total Blocking Time (TBT)", value: `${Math.round(cwv.tbt || 0)}ms`, desc: "Interactivity delay" },
+          { label: "Time to Interactive (TTI)", value: `${((cwv.tti || 0) / 1000).toFixed(2)}s`, desc: "When page is usable" },
+          { label: "Speed Index", value: `${((cwv.speedIndex || 0) / 1000).toFixed(2)}s`, desc: "Visual completion speed" },
+        ];
+        
+        for (const metric of vitalMetrics) {
+          if (y < 80) break;
+          
+          page6.drawRectangle({
+            x: 40,
+            y: y - 35,
+            width: 515,
+            height: 35,
+            color: rgb(0.98, 0.98, 1),
+            borderColor: rgb(0.2, 0.7, 0.2),
+            borderWidth: 1,
+          });
+          
+          page6.drawText(metric.label, {
+            x: 60,
+            y: y - 12,
+            size: 9,
+            color: rgb(0.2, 0.2, 0.2),
+          });
+          
+          page6.drawText(metric.value, {
+            x: 380,
+            y: y - 12,
+            size: 11,
+            color: rgb(0.1, 0.5, 0.1),
+          });
+          
+          page6.drawText(metric.desc, {
+            x: 60,
+            y: y - 23,
+            size: 8,
+            color: rgb(0.6, 0.6, 0.6),
+          });
+          
+          y -= 40;
+        }
+        
+        // Add explanation
+        if (y > 80) {
+          page6.drawRectangle({
+            x: 40,
+            y: y - 50,
+            width: 515,
+            height: 50,
+            color: rgb(0.98, 0.98, 1),
+            borderColor: rgb(0.7, 0.9, 0.7),
+            borderWidth: 0.5,
+          });
+          
+          page6.drawText("Core Web Vitals measure real user experience: loading speed (FCP/LCP), visual stability (CLS), and interactivity (TBT/TTI).", {
+            x: 55,
+            y: y - 20,
+            size: 8,
+            color: rgb(0.3, 0.6, 0.3),
+          });
+        }
+      }
+      
+      // PAGE 7: GOOGLE LIGHTHOUSE SCORES
+      if (scanResults.performance?.lighthouse_scores) {
+        const page7 = pdfDoc.addPage([pageWidth, pageHeight]);
+        drawPageHeader(page7, "Google Lighthouse Scores", pageNum++);
+        y = pageHeight - 100;
+        
+        page7.drawText("Comprehensive Lighthouse Analysis", {
+          x: 40,
+          y: y,
+          size: 12,
+          color: rgb(0.1, 0.3, 0.6),
+        });
+        y -= 30;
+        
+        const lh = scanResults.performance.lighthouse_scores;
+        const lighthouseScores = [
+          { label: "Performance", value: lh.performance || 0 },
+          { label: "Accessibility", value: lh.accessibility || 0 },
+          { label: "Best Practices", value: lh.bestPractices || 0 },
+          { label: "SEO", value: lh.seo || 0 },
+          { label: "PWA", value: lh.pwa || 0 },
+        ];
+        
+        for (const score of lighthouseScores) {
+          const scoreVal = score.value;
+          const color = scoreVal >= 80 ? rgb(0.1, 0.6, 0.2) : scoreVal >= 60 ? rgb(1, 0.7, 0) : rgb(0.8, 0.1, 0.1);
+          
+          page7.drawRectangle({
+            x: 40,
+            y: y - 30,
+            width: 515,
+            height: 30,
+            color: rgb(0.98, 0.98, 1),
+            borderColor: color,
+            borderWidth: 2,
+          });
+          
+          page7.drawText(score.label, {
+            x: 60,
+            y: y - 12,
+            size: 10,
+            color: rgb(0.2, 0.2, 0.2),
+          });
+          
+          page7.drawText(`${scoreVal}/100`, {
+            x: 420,
+            y: y - 12,
+            size: 14,
+            color: color,
+          });
+          
+          // Progress bar
+          const barWidth = (scoreVal / 100) * 80;
+          page7.drawRectangle({
+            x: 60,
+            y: y - 24,
+            width: 80,
+            height: 4,
+            color: rgb(0.9, 0.9, 0.9),
+            borderColor: rgb(0.8, 0.8, 0.8),
+            borderWidth: 0.5,
+          });
+          
+          page7.drawRectangle({
+            x: 60,
+            y: y - 24,
+            width: barWidth,
+            height: 4,
+            color: color,
+          });
+          
+          y -= 35;
+        }
+        
+        // Add explanation
+        if (y > 80) {
+          page7.drawRectangle({
+            x: 40,
+            y: y - 40,
+            width: 515,
+            height: 40,
+            color: rgb(0.98, 0.98, 1),
+            borderColor: rgb(0.7, 0.9, 0.7),
+            borderWidth: 0.5,
+          });
+          
+          page7.drawText("Scores 80+: Excellent | 60-79: Good | Below 60: Needs improvement. Focus on areas with lower scores.", {
+            x: 55,
+            y: y - 20,
+            size: 8,
+            color: rgb(0.3, 0.6, 0.3),
+          });
+        }
+      }
+      
+      // PAGE 8: E2E TESTING DETAILED
+      if (scanResults.e2e) {
+        const page8 = pdfDoc.addPage([pageWidth, pageHeight]);
+        drawPageHeader(page8, "End-to-End Testing Analysis", pageNum++);
+        y = pageHeight - 100;
+        
+        page8.drawText("Interactive Elements Detected", {
+          x: 40,
+          y: y,
+          size: 12,
+          color: rgb(0.5, 0.2, 0.8),
+        });
+        y -= 25;
+        
+        // E2E Metrics
+        const e2eMetrics = [
+          { label: "Buttons Found", value: scanResults.e2e.buttons_found || 0, desc: "Interactive button elements" },
+          { label: "Links Found", value: scanResults.e2e.links_found || 0, desc: "Navigational links" },
+          { label: "Forms Found", value: scanResults.e2e.forms_found || 0, desc: "User input forms" },
+        ];
+        
+        for (const metric of e2eMetrics) {
+          page8.drawRectangle({
+            x: 40,
+            y: y - 32,
+            width: 515,
+            height: 32,
+            color: rgb(0.95, 0.93, 1),
+            borderColor: rgb(0.5, 0.2, 0.8),
+            borderWidth: 1,
+          });
+          
+          page8.drawText(metric.label, {
+            x: 60,
+            y: y - 12,
+            size: 10,
+            color: rgb(0.2, 0.2, 0.2),
+          });
+          
+          page8.drawText(`${metric.value}`, {
+            x: 420,
+            y: y - 12,
+            size: 16,
+            color: rgb(0.5, 0.2, 0.8),
+          });
+          
+          page8.drawText(metric.desc, {
+            x: 60,
+            y: y - 22,
+            size: 8,
+            color: rgb(0.6, 0.6, 0.6),
+          });
+          
+          y -= 38;
+        }
+        
+        y -= 15;
+        
+        // Primary Actions
+        if (scanResults.e2e.primary_actions && scanResults.e2e.primary_actions.length > 0) {
+          page8.drawText("Primary Actions Detected", {
+            x: 40,
+            y: y,
+            size: 11,
+            color: rgb(0.2, 0.2, 0.2),
+          });
+          y -= 18;
+          
+          for (const action of scanResults.e2e.primary_actions.slice(0, 8)) {
+            if (y < 60) break;
+            
+            page8.drawRectangle({
+              x: 40,
+              y: y - 15,
+              width: 515,
+              height: 15,
+              color: rgb(0.95, 0.93, 1),
+              borderColor: rgb(0.7, 0.7, 0.9),
+              borderWidth: 0.5,
+            });
+            
+            page8.drawText(`- ${String(action).substring(0, 100)}`, {
+              x: 60,
+              y: y - 8,
+              size: 8,
+              color: rgb(0.3, 0.3, 0.3),
+            });
+            
+            y -= 18;
+          }
+        }
+      }
+      
+      // PAGE 9: TECHNOLOGIES DETECTED
+      if (technologies.length > 0) {
+        const page9 = pdfDoc.addPage([pageWidth, pageHeight]);
+        drawPageHeader(page9, "Technologies Detected", pageNum++);
+        y = pageHeight - 100;
+        
+        page9.drawText("Technology Stack Analysis", {
+          x: 40,
+          y: y,
+          size: 12,
+          color: rgb(0.1, 0.3, 0.6),
+        });
+        y -= 25;
+        
+        page9.drawText(`Total Technologies Detected: ${technologies.length}`, {
+          x: 40,
+          y: y,
+          size: 10,
+          color: rgb(0.3, 0.3, 0.3),
+        });
+        y -= 20;
+        
+        let col = 0;
+        let xPos = 40;
+        let currentY = y;
+        
+        for (const tech of technologies) {
+          const boxWidth = 240;
+          const boxHeight = 28;
+          
+          if (col > 1) {
+            col = 0;
+            currentY -= 35;
+            xPos = 40;
+          }
+          
+          if (currentY < 80) {
+            break;
+          }
+          
+          page9.drawRectangle({
+            x: xPos,
+            y: currentY - boxHeight,
+            width: boxWidth,
+            height: boxHeight,
+            color: rgb(0.95, 0.98, 1),
+            borderColor: rgb(0.3, 0.5, 0.8),
+            borderWidth: 0.5,
+          });
+          
+          page9.drawText(`- ${tech}`, {
+            x: xPos + 10,
+            y: currentY - 15,
+            size: 9,
+            color: rgb(0.1, 0.3, 0.6),
+          });
+          
+          xPos += 260;
+          col++;
+        }
+        
+        // Add explanation
+        if (currentY > 100) {
+          page9.drawRectangle({
+            x: 40,
+            y: currentY - 60,
+            width: 515,
+            height: 60,
+            color: rgb(0.98, 0.98, 1),
+            borderColor: rgb(0.7, 0.9, 0.7),
+            borderWidth: 0.5,
+          });
+          
+          page9.drawText("Technology Stack: The frameworks, libraries, and platforms used to build your website. Understanding", {
+            x: 55,
+            y: currentY - 30,
+            size: 8,
+            color: rgb(0.3, 0.6, 0.3),
+          });
+          
+          page9.drawText("your tech stack helps evaluate maintenance, security, and scalability of your application.", {
+            x: 55,
+            y: currentY - 42,
+            size: 8,
+            color: rgb(0.3, 0.6, 0.3),
+          });
+        }
+      }
+      
+      // PAGE 10: AI ANALYSIS & RECOMMENDATIONS (EXPANDED)
+      if (aiSummary || (aiRecommendations && aiRecommendations.length > 0)) {
+        const page10 = pdfDoc.addPage([pageWidth, pageHeight]);
+        drawPageHeader(page10, "AI Analysis & Recommendations", pageNum++);
+        y = pageHeight - 100;
+        
+        if (aiSummary) {
+          page10.drawText("AI-Powered Summary", {
+            x: 40,
+            y: y,
+            size: 13,
+            color: rgb(0.1, 0.3, 0.6),
+          });
+          y -= 20;
+          
+          // Large summary box
+          const summaryText = String(aiSummary);
+          const summaryLines = wrapText(summaryText, 470, 9);
+          const summaryHeight = Math.min(summaryLines.length * 12 + 20, 280);
+          
+          page10.drawRectangle({
+            x: 40,
+            y: y - summaryHeight,
+            width: 515,
+            height: summaryHeight,
+            color: rgb(0.95, 0.98, 1),
+            borderColor: rgb(0.3, 0.5, 0.8),
+            borderWidth: 2,
+          });
+          
+          for (const line of summaryLines.slice(0, Math.floor(summaryHeight / 12))) {
+            page10.drawText(line, {
+              x: 60,
+              y: y - 15,
+              size: 9,
+              color: rgb(0.1, 0.2, 0.3),
+            });
+            y -= 12;
+          }
+          
+          y -= 30;
+        }
+        
+        if (aiRecommendations && aiRecommendations.length > 0) {
+          page10.drawText("Recommendations", {
+            x: 40,
+            y: y,
+            size: 13,
+            color: rgb(0.1, 0.5, 0.1),
+          });
+          y -= 18;
+          
+          let recCount = 0;
+          for (const rec of aiRecommendations) {
+            if (y < 80 || recCount >= 12) break;
+            
+            const recText = `${recCount + 1}. ${String(rec).substring(0, 120)}`;
+            page10.drawText(recText, {
+              x: 60,
+              y: y,
+              size: 8,
+              color: rgb(0.1, 0.4, 0.1),
+            });
+            y -= 14;
+            recCount++;
+          }
+        }
+      }
+      
+      const pdfBytes = await pdfDoc.save();
+      pdfBase64 = btoa(String.fromCharCode(...new Uint8Array(pdfBytes)));
+      console.log(`Comprehensive PDF generated. Size: ${(pdfBytes.length / 1024).toFixed(2)} KB, Pages: ${pageNum - 1}`);
+    } catch (pdfErr) {
+      console.error("PDF generation error:", pdfErr);
+    }
 
     const { error: updateError } = await supabase
       .from("scan_results")
@@ -217,6 +1374,8 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
         security_checks_total: 7,
         technologies: technologies,
         exposed_endpoints: exposedEndpoints,
+        og_image: ogImage,
+        pdf_report: pdfBase64,
       })
       .eq("id", scanId);
 
@@ -225,7 +1384,7 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
       throw updateError;
     }
 
-    console.log("Scan completed successfully");
+    console.log("Scan completed successfully with PDF generated and stored");
   } catch (error) {
     console.error("Scan processing error:", error);
 
@@ -979,6 +2138,67 @@ async function detectTechStack(url: string): Promise<PipelineSection<TechStackRe
   }
 }
 
+function extractOGImage(htmlContent: string, baseUrl: string): string | null {
+  try {
+    // Try multiple variations of og:image meta tag
+    let ogImageMatch = htmlContent.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
+    
+    if (!ogImageMatch) {
+      ogImageMatch = htmlContent.match(/<meta\s+content=["']([^"']+)["']\s+property=["']og:image["']/i);
+    }
+    
+    if (!ogImageMatch) {
+      ogImageMatch = htmlContent.match(/<meta\s+name=["']og:image["']\s+content=["']([^"']+)["']/i);
+    }
+    
+    if (!ogImageMatch) {
+      // Try with different whitespace patterns
+      ogImageMatch = htmlContent.match(/<meta[^>]*?og:image[^>]*?content\s*=\s*["']([^"']+)["']/i);
+    }
+    
+    if (!ogImageMatch) {
+      ogImageMatch = htmlContent.match(/<meta[^>]*?content\s*=\s*["']([^"']+)["'][^>]*?og:image/i);
+    }
+    
+    if (ogImageMatch && ogImageMatch[1]) {
+      let imageUrl = ogImageMatch[1].trim();
+      
+      // If absolute URL, return it
+      if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+        console.log(`OG image found: ${imageUrl}`);
+        return imageUrl;
+      }
+      
+      // Handle relative URLs
+      if (imageUrl.startsWith('/')) {
+        try {
+          const url = new URL(baseUrl);
+          imageUrl = `${url.protocol}//${url.hostname}${imageUrl}`;
+          console.log(`OG image (relative) resolved to: ${imageUrl}`);
+          return imageUrl;
+        } catch (e) {
+          console.error('Failed to resolve relative OG image URL:', e);
+        }
+      } else if (imageUrl.startsWith('../') || imageUrl.startsWith('./')) {
+        try {
+          const url = new URL(baseUrl);
+          imageUrl = new URL(imageUrl, baseUrl).href;
+          console.log(`OG image (relative path) resolved to: ${imageUrl}`);
+          return imageUrl;
+        } catch (e) {
+          console.error('Failed to resolve relative path OG image:', e);
+        }
+      }
+    }
+    
+    console.log('No OG image meta tag found in HTML');
+    return null;
+  } catch (error) {
+    console.error('Error extracting OG image:', error);
+    return null;
+  }
+}
+
 function extractTopIssues(scanResults: { security?: SecurityResults; accessibility?: AccessibilityResults; performance?: PerformanceResults }): TopIssue[] {
   const issues: TopIssue[] = [];
 
@@ -1060,11 +2280,11 @@ function calculateOverallScore(scanResults: { security?: SecurityResults; perfor
 }
 
 async function generateAIAnalysis(url: string, scanResults: Partial<{ security?: SecurityResults; accessibility?: AccessibilityResults; performance?: PerformanceResults }>, topIssues: TopIssue[], overallScore: number) {
-  const geminiKey = Deno.env.get("GEMINI_API_KEY");
-  console.log("GEMINI_API_KEY value:", geminiKey);
+  const groqKey = Deno.env.get("Console_Groq_AI_API_Key");
+  console.log("Groq API Key configured:", !!groqKey);
 
-  if (!geminiKey) {
-    console.log("GEMINI_API_KEY not configured, skipping AI analysis");
+  if (!groqKey) {
+    console.log("Groq API key not configured, skipping AI analysis");
     return { summary: null, recommendations: [] };
   }
 
@@ -1088,40 +2308,41 @@ Provide:
 
 Format as JSON: {"summary": "...", "recommendations": ["...", "..."]}`;
 
-    console.log("Gemini prompt:", prompt);
+    console.log("Sending request to Groq API...");
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`, {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "Authorization": `Bearer ${groqKey}`,
       },
       body: JSON.stringify({
-        contents: [{
-          parts: [{
-            text: prompt
-          }]
-        }],
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 500,
-        }
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 500,
       }),
     });
 
-    console.log("Gemini API response status:", response.status);
+    console.log("Groq API response status:", response.status);
 
     if (!response.ok) {
       const txt = await response.text().catch(() => '');
-      console.error("Gemini API error:", response.status, txt);
+      console.error("Groq API error:", response.status, txt);
       return { summary: null, recommendations: [] };
     }
 
     const data = await response.json();
-    console.log("Gemini API response data:", JSON.stringify(data));
-    const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    console.log("Groq API response received");
+    const content = data.choices?.[0]?.message?.content;
 
     if (!content) {
-      console.log("Gemini API returned no content");
+      console.log("Groq API returned no content");
       return { summary: null, recommendations: [] };
     }
 
@@ -1135,13 +2356,13 @@ Format as JSON: {"summary": "...", "recommendations": ["...", "..."]}`;
       }
       
       const parsed = JSON.parse(jsonStr);
-      console.log("Gemini parsed summary:", parsed.summary);
+      console.log("Groq parsed AI analysis successfully");
       return {
         summary: parsed.summary || null,
         recommendations: parsed.recommendations || []
       };
     } catch (parseError) {
-      console.log("Gemini content not valid JSON, using raw content:", parseError);
+      console.log("Groq content not valid JSON, using raw content:", parseError);
       return {
         summary: content,
         recommendations: []

@@ -9,7 +9,6 @@ const corsHeaders = {
 };
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-const PDF_API_KEY = Deno.env.get("HTML_to_PDF_API_KEY");
 
 interface ReportRequest {
   scanId: string;
@@ -58,33 +57,13 @@ Deno.serve(async (req: Request) => {
 
     console.log(`Report generated. HTML: ${htmlReport.length} chars, Text: ${textReport.length} chars`);
 
-    // Generate PDF from HTML using PDFlayer API
-    let pdfBuffer: ArrayBuffer | null = null;
-    if (PDF_API_KEY) {
-      try {
-        console.log("Generating PDF from HTML...");
-        
-        // Use FormData to send HTML content to PDFlayer
-        const formData = new FormData();
-        formData.append("access_key", PDF_API_KEY);
-        formData.append("document_html", htmlReport);
-        formData.append("page_size", "A4");
-        
-        const pdfResponse = await fetch("http://api.pdflayer.com/api/convert", {
-          method: "POST",
-          body: formData,
-        });
-
-        if (pdfResponse.ok) {
-          pdfBuffer = await pdfResponse.arrayBuffer();
-          console.log(`PDF generated successfully. Size: ${pdfBuffer.byteLength} bytes`);
-        } else {
-          const pdfError = await pdfResponse.text();
-          console.warn("PDF generation failed:", pdfError);
-        }
-      } catch (pdfErr) {
-        console.warn("PDF generation error:", pdfErr);
-      }
+    // Use pre-generated PDF from database (generated during scan completion)
+    const pdfBase64 = scanResult.pdf_report || null;
+    
+    if (pdfBase64) {
+      console.log("Using pre-generated PDF from database");
+    } else {
+      console.log("No PDF available - was not generated during scan");
     }
 
     if (RESEND_API_KEY) {
@@ -100,14 +79,13 @@ Deno.serve(async (req: Request) => {
         };
 
         // Add PDF attachment if available
-        if (pdfBuffer) {
-          const pdfBase64 = btoa(String.fromCharCode(...new Uint8Array(pdfBuffer)));
+        if (pdfBase64) {
           emailPayload.attachments = [
             {
               filename: `website-scan-${scanResult.target_url.replace(/[^a-z0-9]/gi, '_')}.pdf`,
               content: pdfBase64,
               content_type: "application/pdf",
-            },
+            }
           ];
           console.log("PDF attached to email");
         }
@@ -132,7 +110,7 @@ Deno.serve(async (req: Request) => {
 
         await supabase
           .from("email_submissions")
-          .update({ pdf_sent: true })
+          .update({ pdf_sent: pdfBase64 ? true : false })
           .eq("scan_id", scanId)
           .eq("email", email);
 
@@ -140,7 +118,8 @@ Deno.serve(async (req: Request) => {
           JSON.stringify({ 
             success: true, 
             message: "Report sent successfully",
-            emailId: emailData.id
+            emailId: emailData.id,
+            pdfAttached: pdfBase64 ? true : false
           }),
           {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -157,7 +136,7 @@ Deno.serve(async (req: Request) => {
 
       await supabase
         .from("email_submissions")
-        .update({ pdf_sent: true })
+        .update({ pdf_sent: false })
         .eq("scan_id", scanId)
         .eq("email", email);
 
@@ -234,6 +213,16 @@ function generateHTMLReport(scanResult: DBScanRow): string {
     ? scanResult.ai_recommendations
     : aiData.recommendations;
 
+  console.log("AI Data Debug:", {
+    aiSummaryExists: !!scanResult.ai_summary,
+    aiSummaryLength: String(scanResult.ai_summary).length,
+    aiRecommendationsExists: !!scanResult.ai_recommendations,
+    aiRecommendationsIsArray: Array.isArray(scanResult.ai_recommendations),
+    aiRecommendationsLength: Array.isArray(scanResult.ai_recommendations) ? scanResult.ai_recommendations.length : 0,
+    parsedAISummary: aiSummary ? "Present" : "Null",
+    parsedRecommendationsLength: aiRecommendations.length,
+  });
+
   return `
 <!DOCTYPE html>
 <html>
@@ -244,12 +233,14 @@ function generateHTMLReport(scanResult: DBScanRow): string {
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #1f2937; max-width: 800px; margin: 0 auto; padding: 20px; background-color: #f9fafb;">
 
-  <div style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; padding: 40px 30px; border-radius: 12px; margin-bottom: 30px;">
+  <div style="background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%); color: white; padding: 50px 40px; border-radius: 16px; margin-bottom: 30px; box-shadow: 0 10px 30px rgba(30, 64, 175, 0.3); border: 3px solid #3b82f6;">
     <div style="text-align: center; margin-bottom: 20px;">
-      <img src="https://robo-lab.io/image-copy.png" alt="RoboLab" style="height: 50px; max-width: 100%;" />
+      <div style="font-size: 40px; font-weight: bold; letter-spacing: 2px;">
+        <span style="color: #ffffff;">Robo</span><span style="color: #60a5fa;">Lab</span><span style="color: #60a5fa; font-size: 16px; position: relative; top: -8px; margin-left: 4px;">®</span>
+      </div>
     </div>
-    <h1 style="margin: 0 0 10px 0; font-size: 32px; text-align: center;">Robo-Lab Web Scanner</h1>
-    <p style="margin: 0; font-size: 18px; opacity: 0.9; text-align: center;">Comprehensive Website Analysis Report</p>
+    <h1 style="margin: 0 0 8px 0; font-size: 30px; text-align: center; font-weight: bold; letter-spacing: -0.5px;">Web Scanner Report</h1>
+    <p style="margin: 0; font-size: 14px; opacity: 0.95; text-align: center; letter-spacing: 0.5px;">Comprehensive Security & Performance Analysis</p>
   </div>
 
   <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
@@ -322,7 +313,22 @@ function generateHTMLReport(scanResult: DBScanRow): string {
   </div>
 
   <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-    <h2 style="color: #111827; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">⚡ Performance Analysis</h2>
+    <h2 style="color: #111827; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">📊 Accessibility & Performance Report</h2>
+    <p style="line-height: 1.8; color: #374151;">
+      ${scanResult.target_url || 'Your website'} has a ${scanResult.overall_score || 0}/100 score 
+      ${scanResult.security_results?.issues && scanResult.security_results.issues.length === 0 ? 'with no security issues' : 'with security considerations'}, 
+      but needs accessibility improvements and performance monitoring.
+    </p>
+    <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin-top: 15px; border-radius: 4px;">
+      <h3 style="margin-top: 0; color: #92400e;">Note</h3>
+      <p style="margin: 8px 0; color: #78350f;">
+        Book a consultation with QA experts to implement the recommended accessibility and performance improvements.<a href="https://timerex.net/s/sales_5e77_b801/482a66cf?apiKey=1ufKAEnDi4T0pk5lftqMqjiNmF5SQh8x3Va4pLe5oitNLtgKCuI7BKH5sI0SGLeI" style="color: #3b82f6; text-decoration: underline;">here</a>
+      </p>
+    </div>
+  </div>
+
+  <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+    <h2 style="color: #111827; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">⚡ Detailed Performance Analysis</h2>
     <p><strong>Score:</strong> <span style="color: ${scoreColor(scanResult.performance_results?.score || 0)};">${scanResult.performance_results?.score || 'N/A'}/100</span></p>
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
       <div style="background: #f9fafb; padding: 15px; border-radius: 8px;">
@@ -345,7 +351,7 @@ function generateHTMLReport(scanResult: DBScanRow): string {
   </div>
 
   <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-    <h2 style="color: #111827; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">👁️ Accessibility Analysis</h2>
+    <h2 style="color: #111827; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">👁️ Accessibility Issues</h2>
     <p><strong>Score:</strong> <span style="color: ${scoreColor(scanResult.accessibility_results?.score || 0)};">${scanResult.accessibility_results?.score || 'N/A'}/100</span></p>
     <p><strong>Total Issues:</strong> ${scanResult.accessibility_results?.total_issues || 0}</p>
     

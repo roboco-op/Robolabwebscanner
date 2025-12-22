@@ -109,8 +109,28 @@ export interface ScanResult {
   seo_results?: Record<string, unknown>;
   tech_stack?: TechStackResult;
   top_issues: TopIssue[];
+  og_image?: string | null;
+  wcag_results?: WCAGResults;
   created_at: string;
   expires_at: string;
+}
+
+export interface WCAGIssue {
+  criterion: string;
+  level: 'A' | 'AA';
+  severity: 'critical' | 'serious' | 'moderate' | 'minor';
+  description: string;
+  examples: string[];
+  remediation: string;
+}
+
+export interface WCAGResults {
+  compliant_aa: boolean;
+  compliant_a: boolean;
+  issues: WCAGIssue[];
+  checked_criteria: number;
+  passed_criteria: number;
+  score: number;
 }
 
 export interface TopIssue {

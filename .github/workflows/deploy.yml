@@ -11,54 +11,40 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout repository
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
 
-      # 3️⃣ Install dependencies
       - name: Install dependencies
         run: npm install
 
-      # 4️⃣ Build application with ALL required environment variables
       - name: Build app
         run: npm run build
         env:
-          # --- Vite / Frontend safe variables ---
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-
           GOOGLE_PAGESPEED_API_KEY: ${{ secrets.GOOGLE_PAGESPEED_API_KEY }}
           PAGE_PAGESPEED_INSIGHTS_API_KEY: ${{ secrets.PAGE_PAGESPEED_INSIGHTS_API_KEY }}
-
-          # --- Server / tooling keys (used at build-time only) ---
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           CONSOLE_GROQ_AI_API_KEY: ${{ secrets.CONSOLE_GROQ_AI_API_KEY }}
 
-      # 5️⃣ Upload built files to VPS
-      - name: Upload dist to VPS
-        uses: appleboy/scp-action@v0.1.7
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
         with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          source: "dist/*"
-          target: "/var/www/robolabwebscanner/dist"
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
 
-      # 6️⃣ Reload Nginx on VPS
+      - name: Deploy dist via rsync
+        run: |
+          rsync -avz --delete dist/ root@${{ secrets.VPS_HOST }}:/var/www/robolabwebscanner/dist/
+
       - name: Reload Nginx
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script: systemctl reload nginx
+        run: |
+          ssh root@${{ secrets.VPS_HOST }} "systemctl reload nginx"
 

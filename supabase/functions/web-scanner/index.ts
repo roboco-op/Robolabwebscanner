@@ -1385,18 +1385,18 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
     }
 
     console.log("Scan completed successfully with PDF generated and stored");
-  } catch (error) {
-    console.error("Scan processing error:", error);
+} catch (error) {
+  console.error("Scan processing error:", error);
 
-    try {
-      await supabase
-        .from("scan_results")
-        .update({ scan_status: "failed" })
-        .eq("id", scanId);
-    } catch (updateErr) {
-      console.error("Failed to update scan status to failed:", updateErr);
-    }
+  try {
+    await supabase
+      .from("scan_results")
+      .update({ scan_status: "failed" })
+      .eq("id", scanId);
+  } catch (updateErr) {
+    console.error("Failed to update scan status to failed:", updateErr);
   }
+}
 
 type PipelineSection<T> = T & { status?: 'pending' | 'completed' | 'failed'; error?: string };
 type PipelineResults = {

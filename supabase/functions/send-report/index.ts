@@ -233,23 +233,19 @@ function generateHTMLReport(scanResult: DBScanRow): string {
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #1f2937; max-width: 800px; margin: 0 auto; padding: 20px; background-color: #f9fafb;">
 
-  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:800px;margin:0 auto 30px;border-collapse:collapse;background-color:#1e40af;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:800px;margin:0 auto 30px;border-collapse:collapse;" bgcolor="#1e40af">
     <tr>
-      <td style="background-color:#1e40af;padding:50px 40px;text-align:center;border:3px solid #3b82f6;">
-        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background-color:#1e40af;">
+      <td bgcolor="#1e40af" style="padding:50px 40px;text-align:center;border:3px solid #3b82f6;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;" bgcolor="#1e40af">
           <tr>
-            <td style="text-align:center;background-color:#1e40af;">
-              <span style="font-size:40px;font-weight:bold;letter-spacing:2px;color:#3b82f6;">Robo</span><span style="font-size:40px;font-weight:bold;letter-spacing:2px;color:#1e40af;">Lab</span><span style="color:#1e40af;font-size:16px;margin-left:4px;vertical-align:super;">&#174;</span>
-            </td>
-          </tr>
-          <tr>
-            <td style="text-align:center;padding-top:12px;background-color:#1e40af;">
-              <h1 style="margin:0 0 8px 0;font-size:30px;font-weight:bold;letter-spacing:-0.5px;color:#3b82f6;">Web Scanner AI Report</h1>
-            </td>
-          </tr>
-          <tr>
-            <td style="text-align:center;padding-top:4px;background-color:#1e40af;">
-              <p style="margin:0;font-size:14px;letter-spacing:0.5px;color:#dbeafe;">Comprehensive Security & Performance Analysis</p>
+            <td align="center" bgcolor="#1e40af">
+              <font face="Arial, Helvetica, sans-serif" color="#3b82f6" style="font-size:40px;font-weight:bold;letter-spacing:2px;">Robo</font>
+              <font face="Arial, Helvetica, sans-serif" color="#1e40af" style="font-size:40px;font-weight:bold;letter-spacing:2px;">Lab</font>
+              <font face="Arial, Helvetica, sans-serif" color="#1e40af" style="font-size:16px;vertical-align:super;">&#174;</font>
+              <br/>
+              <font face="Arial, Helvetica, sans-serif" color="#3b82f6" style="font-size:30px;font-weight:bold;letter-spacing:-0.5px;">Web Scanner AI Report</font>
+              <br/>
+              <font face="Arial, Helvetica, sans-serif" color="#dbeafe" style="font-size:14px;letter-spacing:0.5px;">Comprehensive Security & Performance Analysis</font>
             </td>
           </tr>
         </table>

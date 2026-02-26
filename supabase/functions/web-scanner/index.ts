@@ -1397,6 +1397,7 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
     console.error("Failed to update scan status to failed:", updateErr);
   }
 }
+}
 
 type PipelineSection<T> = T & { status?: 'pending' | 'completed' | 'failed'; error?: string };
 type PipelineResults = {

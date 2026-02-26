@@ -236,19 +236,19 @@ function generateHTMLReport(scanResult: DBScanRow): string {
   <table width="100%" cellpadding="0" cellspacing="0" style="max-width:800px;margin:0 auto 30px;border-collapse:collapse;background-color:#1e40af;">
     <tr>
       <td style="background-color:#1e40af;padding:50px 40px;text-align:center;border:3px solid #3b82f6;">
-        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background-color:#1e40af;">
           <tr>
-            <td style="text-align:center;">
+            <td style="text-align:center;background-color:#1e40af;">
               <span style="font-size:40px;font-weight:bold;letter-spacing:2px;color:#fff;">Robo</span><span style="font-size:40px;font-weight:bold;letter-spacing:2px;color:#93c5fd;">Lab</span><span style="color:#93c5fd;font-size:16px;margin-left:4px;vertical-align:super;">&#174;</span>
             </td>
           </tr>
           <tr>
-            <td style="text-align:center;padding-top:12px;">
+            <td style="text-align:center;padding-top:12px;background-color:#1e40af;">
               <h1 style="margin:0 0 8px 0;font-size:30px;font-weight:bold;letter-spacing:-0.5px;color:#fff;">Web Scanner Report</h1>
             </td>
           </tr>
           <tr>
-            <td style="text-align:center;padding-top:4px;">
+            <td style="text-align:center;padding-top:4px;background-color:#1e40af;">
               <p style="margin:0;font-size:14px;letter-spacing:0.5px;color:#dbeafe;">Comprehensive Security & Performance Analysis</p>
             </td>
           </tr>

@@ -289,24 +289,24 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
         if (currentLine) lines.push(currentLine);
         return lines;
       };
-      
-      const drawPageHeader = (page: any, title: string, pageNum: number) => {
-        // Dark blue header
-        page.drawRectangle({
-          x: 0,
-          y: pageHeight - 80,
-          width: pageWidth,
-          height: 80,
-          color: rgb(0.05, 0.15, 0.35),
-        
-        // RoboLab(R) text logo in header
-        page.drawText("RoboLab(R)", {
-          x: 40,
-          y: pageHeight - 42,
-          size: 20,
-          color: rgb(1, 1, 1),
-        });
-        
+     const drawPageHeader = (page: any, title: string, pageNum: number) => {
+  // Dark blue header
+  page.drawRectangle({
+    x: 0,
+    y: pageHeight - 80,
+    width: pageWidth,
+    height: 80,
+    color: rgb(0.05, 0.15, 0.35),
+  });  // <-- YOU WERE MISSING THIS
+
+  // RoboLab(R) text logo in header
+  page.drawText("RoboLab(R)", {
+    x: 40,
+    y: pageHeight - 42,
+    size: 20,
+    color: rgb(1, 1, 1),
+  });
+};
         // Title
         page.drawText(title, {
           x: 260,

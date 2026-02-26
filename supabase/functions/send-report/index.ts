@@ -231,31 +231,25 @@ function generateHTMLReport(scanResult: DBScanRow): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Robo-Lab Web Scanner Report</title>
 </head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #1f2937; margin: 0; padding: 20px; background-color: #f9fafb;">
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #1f2937; max-width: 800px; margin: 0 auto; padding: 20px; background-color: #f9fafb;">
 
-  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse: collapse; width: 100%;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:800px;margin:0 auto 30px;border-collapse:collapse;background-color:#1e40af;">
     <tr>
-      <td align="center" style="padding: 0;">
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="800" style="border-collapse: collapse; width: 100%; max-width: 800px;">
+      <td style="background-color:#1e40af;padding:50px 40px;text-align:center;border:3px solid #3b82f6;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
           <tr>
-            <td style="background-color: #eff6ff; color: #0f172a; padding: 50px 40px; border-radius: 16px; margin-bottom: 30px; border: 2px solid #93c5fd;" align="center">
-              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse: collapse;">
-                <tr>
-                  <td align="center" style="padding: 0 0 20px 0;">
-                    <span style="font-size: 40px; font-weight: bold; letter-spacing: 2px; color: #0f172a;">Robo</span><span style="font-size: 40px; font-weight: bold; letter-spacing: 2px; color: #1d4ed8;">Lab</span><span style="font-size: 16px; font-weight: bold; color: #1d4ed8; vertical-align: super; margin-left: 4px;">&#174;</span>
-                  </td>
-                </tr>
-                <tr>
-                  <td align="center" style="padding: 0 0 8px 0; font-size: 30px; line-height: 36px; font-weight: bold; letter-spacing: -0.5px; color: #0f172a;">
-                    Web Scanner Report
-                  </td>
-                </tr>
-                <tr>
-                  <td align="center" style="padding: 0; font-size: 14px; line-height: 20px; letter-spacing: 0.5px; color: #1e3a8a;">
-                    Comprehensive Security & Performance Analysis
-                  </td>
-                </tr>
-              </table>
+            <td style="text-align:center;">
+              <span style="font-size:40px;font-weight:bold;letter-spacing:2px;color:#fff;">Robo</span><span style="font-size:40px;font-weight:bold;letter-spacing:2px;color:#93c5fd;">Lab</span><span style="color:#93c5fd;font-size:16px;margin-left:4px;vertical-align:super;">&#174;</span>
+            </td>
+          </tr>
+          <tr>
+            <td style="text-align:center;padding-top:12px;">
+              <h1 style="margin:0 0 8px 0;font-size:30px;font-weight:bold;letter-spacing:-0.5px;color:#fff;">Web Scanner Report</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="text-align:center;padding-top:4px;">
+              <p style="margin:0;font-size:14px;letter-spacing:0.5px;color:#dbeafe;">Comprehensive Security & Performance Analysis</p>
             </td>
           </tr>
         </table>
@@ -263,7 +257,6 @@ function generateHTMLReport(scanResult: DBScanRow): string {
     </tr>
   </table>
 
-  <div style="max-width: 800px; margin: 0 auto;">
   <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
     <h2 style="color: #111827; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">Scan Summary</h2>
     <table style="width: 100%; border-collapse: collapse;">
@@ -416,7 +409,6 @@ function generateHTMLReport(scanResult: DBScanRow): string {
     <p>Non-intrusive scans • Respects robots.txt • Results stored 30 days</p>
   </div>
 
-  </div>
 </body>
 </html>
   `;

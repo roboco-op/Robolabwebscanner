@@ -2,45 +2,61 @@ name: Deploy to Hostinger VPS
 
 on:
   push:
-    branches: [ main, master ]
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
+      # 1. Checkout code
       - name: Checkout code
         uses: actions/checkout@v4
-
+      # 2. Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'npm'
+          node-version: 20
+          cache: npm
 
+      # 3. Install dependencies
       - name: Install dependencies
         run: npm install
 
-      - name: Build project
+      # 4. Build app
+      - name: Build app
+        run: npm run build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           GOOGLE_PAGESPEED_API_KEY: ${{ secrets.GOOGLE_PAGESPEED_API_KEY }}
+          PAGE_PAGESPEED_INSIGHTS_API_KEY: ${{ secrets.PAGE_PAGESPEED_INSIGHTS_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: npm run build
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          CONSOLE_GROQ_AI_API_KEY: ${{ secrets.CONSOLE_GROQ_AI_API_KEY }}
 
-      - name: Deploy to Hostinger via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+      # 5. Load SSH key
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
         with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: dist/
-          server-dir: public_html/
-          dangerous-clean-slate: false
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/node_modules/**
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+
+      # 6. Trust the VPS host (FIXES host key verification error)
+      - name: Add VPS to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      # 7. Deploy build to VPS
+      - name: Deploy dist via rsync
+        run: |
+          rsync -avz --delete dist/ root@${{ secrets.VPS_HOST }}:/var/www/robolabwebscanner/dist/
+
+      # 8. Reload Nginx
+      - name: Reload Nginx
+        run: |
+          ssh root@${{ secrets.VPS_HOST }} "systemctl reload nginx"
 

@@ -289,6 +289,10 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
         if (currentLine) lines.push(currentLine);
         return lines;
       };
+<<<<<<< ours
+=======
+      
+>>>>>>> theirs
      const drawPageHeader = (page: any, title: string, pageNum: number) => {
   // Dark blue header
   page.drawRectangle({
@@ -306,6 +310,7 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
     size: 20,
     color: rgb(1, 1, 1),
   });
+<<<<<<< ours
 
   // Title
   page.drawText(title, {
@@ -348,6 +353,51 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
     color: rgb(0.6, 0.6, 0.6),
   });
 };
+=======
+};
+        
+        // Title
+        page.drawText(title, {
+          x: 260,
+          y: pageHeight - 40,
+          size: 14,
+          color: rgb(1, 1, 1),
+        });
+        
+        // Page number
+        page.drawText(`Page ${pageNum}`, {
+          x: pageWidth - 80,
+          y: pageHeight - 40,
+          size: 10,
+          color: rgb(0.8, 0.8, 0.8),
+        });
+        
+        // Footer line
+        page.drawRectangle({
+          x: 0,
+          y: 50,
+          width: pageWidth,
+          height: 0.5,
+          color: rgb(0.8, 0.8, 0.8),
+        });
+        
+        // Footer logo with RoboLab(R) text
+        page.drawText("RoboLab(R)", {
+          x: 40,
+          y: 30,
+          size: 11,
+          color: rgb(0.05, 0.15, 0.35),
+        });
+        
+        // Footer text
+        page.drawText("Robo-Lab Web Scanner - Professional Security & Performance Analysis", {
+          x: 250,
+          y: 30,
+          size: 8,
+          color: rgb(0.6, 0.6, 0.6),
+        });
+      };
+>>>>>>> theirs
       
       const score = overallScore;
       let pageNum = 1;

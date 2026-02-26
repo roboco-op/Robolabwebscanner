@@ -18,7 +18,7 @@ If you haven't already, create a GitHub repository:
 git init
 git add .
 git commit -m "Initial commit"
-git remote add origin https://github.com/YOUR-USERNAME/YOUR-REPO-NAME.git
+git remote add origin https://github.com/roboco-op/webscanner
 git branch -M main
 git push -u origin main
 ```

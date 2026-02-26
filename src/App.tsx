@@ -142,10 +142,10 @@ function App() {
         {!scanResult && (
           <div className="text-center mt-8 mb-16 px-4">
             <h1 className="text-3xl md:text-5xl font-bold text-gray-900 mb-4">
-              Robo-Lab Web Scanner
+              Robo-Lab Web Scanner AI
             </h1>
             <p className="text-lg md:text-xl text-gray-600 max-w-2xl mx-auto">
-              Comprehensive automated analysis for E2E, API, Security, Performance & Accessibility
+              Comprehensive automated analysis for E2E, API, Security, Performance & Accessibility.
             </p>
           </div>
         )}

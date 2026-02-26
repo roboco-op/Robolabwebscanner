@@ -229,7 +229,7 @@ function generateHTMLReport(scanResult: DBScanRow): string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Robo-Lab Web Scanner Report</title>
+  <title>Robo-Lab Web Scanner AI Report</title>
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #1f2937; max-width: 800px; margin: 0 auto; padding: 20px; background-color: #f9fafb;">
 
@@ -239,12 +239,12 @@ function generateHTMLReport(scanResult: DBScanRow): string {
         <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background-color:#1e40af;">
           <tr>
             <td style="text-align:center;background-color:#1e40af;">
-              <span style="font-size:40px;font-weight:bold;letter-spacing:2px;color:#fff;">Robo</span><span style="font-size:40px;font-weight:bold;letter-spacing:2px;color:#93c5fd;">Lab</span><span style="color:#93c5fd;font-size:16px;margin-left:4px;vertical-align:super;">&#174;</span>
+              <span style="font-size:40px;font-weight:bold;letter-spacing:2px;color:#3b82f6;">Robo</span><span style="font-size:40px;font-weight:bold;letter-spacing:2px;color:#1e40af;">Lab</span><span style="color:#1e40af;font-size:16px;margin-left:4px;vertical-align:super;">&#174;</span>
             </td>
           </tr>
           <tr>
             <td style="text-align:center;padding-top:12px;background-color:#1e40af;">
-              <h1 style="margin:0 0 8px 0;font-size:30px;font-weight:bold;letter-spacing:-0.5px;color:#fff;">Web Scanner Report</h1>
+              <h1 style="margin:0 0 8px 0;font-size:30px;font-weight:bold;letter-spacing:-0.5px;color:#3b82f6;">Web Scanner AI Report</h1>
             </td>
           </tr>
           <tr>

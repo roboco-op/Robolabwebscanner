@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Calendar, Loader2 } from 'lucide-react';
+import { Calendar, Loader2, History } from 'lucide-react';
 import { LegalBanner } from './components/LegalBanner';
 import { ScanForm } from './components/ScanForm';
 import ResultsPreview from './components/ResultsPreview';
 import { ConsultationModal } from './components/ConsultationModal';
+import { ScanHistory } from './components/ScanHistory';
 import { supabase } from './lib/supabase';
 import type { ScanResult } from './types/scan';
 
@@ -12,6 +13,7 @@ function App() {
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [showConsultationModal, setShowConsultationModal] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   useEffect(() => {
     if (!scanResult || scanResult.scan_status === 'completed' || scanResult.scan_status === 'failed') {
@@ -82,6 +84,18 @@ function App() {
     setScanResult(null);
     setScanning(false);
     setErrorMessage('');
+    setShowHistory(false);
+  };
+
+  const handleToggleHistory = () => {
+    setShowHistory(!showHistory);
+    setScanResult(null);
+    setScanning(false);
+  };
+
+  const handleViewScan = (scan: ScanResult) => {
+    setScanResult(scan);
+    setShowHistory(false);
   };
 
   const handleEmailSubmit = async (email: string, optIn: boolean) => {
@@ -126,19 +140,36 @@ function App() {
             <button onClick={handleNewScan} className="cursor-pointer bg-transparent border-none p-0">
               <img src="/image copy.png" alt="RoboLab Logo" className="h-8 md:h-10 hover:opacity-80 transition-opacity" />
             </button>
-            <button
-              onClick={() => setShowConsultationModal(true)}
-              className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 font-medium text-sm md:text-base"
-            >
-              <Calendar className="w-4 h-4 md:w-5 md:h-5" />
-              <span className="hidden sm:inline">Book Consultation</span>
-              <span className="sm:hidden">Book</span>
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleToggleHistory}
+                className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2 font-medium text-sm md:text-base"
+              >
+                <History className="w-4 h-4 md:w-5 md:h-5" />
+                <span className="hidden sm:inline">Scan History</span>
+              </button>
+              <button
+                onClick={() => setShowConsultationModal(true)}
+                className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 font-medium text-sm md:text-base"
+              >
+                <Calendar className="w-4 h-4 md:w-5 md:h-5" />
+                <span className="hidden sm:inline">Book Consultation</span>
+                <span className="sm:hidden">Book</span>
+              </button>
+            </div>
           </div>
         </div>
       </header>
 
       <div className="container mx-auto px-4 py-8">
+        <ConsultationModal
+          isOpen={showConsultationModal}
+          onClose={() => setShowConsultationModal(false)}
+        />
+        {showHistory ? (
+          <ScanHistory onViewScan={handleViewScan} />
+        ) : (
+          <>
         {!scanResult && (
           <div className="text-center mt-8 mb-16 px-4">
             <h1 className="text-3xl md:text-5xl font-bold text-gray-900 mb-4">
@@ -149,11 +180,6 @@ function App() {
             </p>
           </div>
         )}
-
-        <ConsultationModal
-          isOpen={showConsultationModal}
-          onClose={() => setShowConsultationModal(false)}
-        />
 
         <div className="flex flex-col items-center gap-8">
           {!scanResult && (
@@ -218,7 +244,7 @@ function App() {
                     <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0 animate-pulse">
                       <Loader2 className="w-3 h-3 text-white animate-spin" />
                     </div>
-                    <span className="text-gray-700 font-medium">Performance analysis (Google PageSpeed)</span>
+                    <span className="text-gray-700 font-medium">Checking Performance analysis</span>
                   </div>
                   <div className="flex items-center gap-3 text-sm">
                     <div className="w-5 h-5 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0"></div>
@@ -275,6 +301,8 @@ function App() {
         <footer className="text-center mt-16 text-sm text-gray-500">
           <p>Non-intrusive scans only • Respects robots.txt • Results stored 30 days</p>
         </footer>
+          </>
+        )}
       </div>
     </div>
   );

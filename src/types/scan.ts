@@ -111,6 +111,7 @@ export interface ScanResult {
   top_issues: TopIssue[];
   og_image?: string | null;
   wcag_results?: WCAGResults;
+  pdf_report?: string | null;
   created_at: string;
   expires_at: string;
 }

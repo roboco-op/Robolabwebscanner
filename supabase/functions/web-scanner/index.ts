@@ -259,6 +259,9 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
 
     // Save scan results FIRST so the frontend can display them immediately.
     // PDF generation happens afterwards as an optional step.
+    // NOTE: og_image is intentionally excluded here — it is applied separately below
+    // as a best-effort update so that a missing column in the schema cache (PGRST204)
+    // cannot abort the completion of a scan.
     const { error: updateError } = await supabase
       .from("scan_results")
       .update({
@@ -280,7 +283,6 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
         security_checks_total: 7,
         technologies: technologies,
         exposed_endpoints: exposedEndpoints,
-        og_image: ogImage,
       })
       .eq("id", scanId);
 
@@ -290,6 +292,19 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
     }
 
     console.log("Scan results saved successfully — frontend can now display results");
+
+    // Store og_image as a best-effort update — failure does not affect displayed results.
+    // This column requires migration 20260302_add_og_image_column.sql to be applied first.
+    if (ogImage) {
+      const { error: ogUpdateError } = await supabase
+        .from("scan_results")
+        .update({ og_image: ogImage })
+        .eq("id", scanId);
+
+      if (ogUpdateError) {
+        console.error("Failed to store og_image (column may not exist yet):", ogUpdateError);
+      }
+    }
 
     // Generate Professional Multi-Page PDF (optional — failures don't affect scan results)
     let pdfBase64: string | null = null;

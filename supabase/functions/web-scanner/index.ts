@@ -1374,7 +1374,6 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
         security_checks_total: 7,
         technologies: technologies,
         exposed_endpoints: exposedEndpoints,
-        og_image: ogImage,
         pdf_report: pdfBase64,
       })
       .eq("id", scanId);

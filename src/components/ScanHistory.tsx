@@ -2,13 +2,18 @@ import { useState, useEffect } from 'react';
 import { Trash2, Eye, Download, Calendar, TrendingUp } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 import type { ScanResult } from '../types/scan';
+import { ProgressCharts } from './ProgressCharts';
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_ANON_KEY
 );
 
-export function ScanHistory() {
+interface ScanHistoryProps {
+  onViewScan?: (scan: ScanResult) => void;
+}
+
+export function ScanHistory({ onViewScan }: ScanHistoryProps) {
   const [scans, setScans] = useState<ScanResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'completed' | 'failed'>('all');
@@ -49,6 +54,29 @@ export function ScanHistory() {
       setScans(scans.filter(s => s.id !== scanId));
     } catch (err) {
       console.error('Failed to delete scan:', err);
+    }
+  };
+
+  const downloadPdf = async (scan: ScanResult) => {
+    if (scan.pdf_report) {
+      try {
+        const byteChars = atob(scan.pdf_report);
+        const byteNums = new Uint8Array(byteChars.length);
+        for (let i = 0; i < byteChars.length; i++) {
+          byteNums[i] = byteChars.charCodeAt(i);
+        }
+        const blob = new Blob([byteNums], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `scan-report-${scan.id.slice(0, 8)}.pdf`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch {
+        alert('Failed to decode PDF report. The file may be corrupted.');
+      }
+    } else {
+      alert('PDF report is not available for this scan.');
     }
   };
 
@@ -211,25 +239,26 @@ export function ScanHistory() {
                   </td>
                   <td className="px-6 py-4 flex gap-2">
                     <button
-                      onClick={() => window.open(`/scan/${scan.id}`, '_blank')}
+                      onClick={() => onViewScan ? onViewScan(scan) : undefined}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault();
-                          window.open(`/scan/${scan.id}`, '_blank');
+                          if (onViewScan) onViewScan(scan);
                         }
                       }}
                       className="p-2 hover:bg-blue-100 rounded-lg transition focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                       aria-label={`View scan results for ${scan.target_url}`}
                       title="View Details"
+                      disabled={!onViewScan}
                     >
                       <Eye className="w-4 h-4 text-blue-600" />
                     </button>
                     <button
-                      onClick={() => console.log('Download:', scan.id)}
+                      onClick={() => downloadPdf(scan)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault();
-                          console.log('Download:', scan.id);
+                          downloadPdf(scan);
                         }
                       }}
                       className="p-2 hover:bg-green-100 rounded-lg transition focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
@@ -263,6 +292,16 @@ export function ScanHistory() {
       <div className="mt-6 text-sm text-gray-600">
         Showing {filteredScans.length} of {scans.length} scans
       </div>
+
+      {scans.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-blue-600" />
+            Progress Analytics
+          </h2>
+          <ProgressCharts scans={scans} />
+        </div>
+      )}
     </div>
   );
 }

@@ -40,6 +40,7 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
   };
   
   const initialParsed = parseAISummary(result.ai_summary ?? null);
+  const { summary: aiSummary, recommendations: aiRecommendations } = initialParsed;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -286,6 +287,31 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
           </div>
         )}
       </div>
+
+      {(aiSummary || (aiRecommendations && aiRecommendations.length > 0)) && (
+        <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-lg p-6 mb-8 border border-indigo-200">
+          <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+            <span className="text-2xl">🤖</span>
+            AI Analysis
+          </h3>
+          {aiSummary && (
+            <p className="text-sm text-gray-700 mb-4">{aiSummary}</p>
+          )}
+          {aiRecommendations && aiRecommendations.length > 0 && (
+            <div>
+              <h4 className="text-sm font-semibold text-gray-800 mb-2">Recommendations</h4>
+              <ul className="space-y-2">
+                {aiRecommendations.map((rec, idx) => (
+                  <li key={idx} className="flex items-start gap-2 text-sm text-gray-700">
+                    <span className="text-indigo-500 font-bold mt-0.5">→</span>
+                    <span>{rec}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
 
         <div>
           <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">

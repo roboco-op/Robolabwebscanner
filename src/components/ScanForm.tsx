@@ -82,7 +82,7 @@ export function ScanForm({ onScan, loading }: ScanFormProps) {
           }}
           className="w-full px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all disabled:from-gray-500 disabled:to-gray-600 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-medium shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-slate-900"
           aria-label={loading ? 'Scanning website' : 'Start deep website scan'}
-          aria-busy={loading ? "true" : "false"}
+          aria-busy={loading}
         >
           {loading ? (
             <>

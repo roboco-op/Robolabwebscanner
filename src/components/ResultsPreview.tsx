@@ -15,31 +15,9 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
   
-  // Parse AI summary if it's wrapped in markdown code blocks
-  const parseAISummary = (raw: string | null): { summary: string | null; recommendations: string[] } => {
-    if (!raw) return { summary: null, recommendations: [] };
-    
-    try {
-      // Remove markdown code blocks
-      let jsonStr = raw.trim();
-      if (jsonStr.startsWith('```json')) {
-        jsonStr = jsonStr.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-      } else if (jsonStr.startsWith('```')) {
-        jsonStr = jsonStr.replace(/^```\s*/, '').replace(/\s*```$/, '');
-      }
-      
-      const parsed = JSON.parse(jsonStr);
-      return {
-        summary: parsed.summary || null,
-        recommendations: parsed.recommendations || []
-      };
-    } catch {
-      // If parsing fails, return raw content as summary
-      return { summary: raw, recommendations: [] };
-    }
-  };
+  // parseAISummary was removed because it's unused; parse AI summary on demand if needed
   
-  const initialParsed = parseAISummary(result.ai_summary ?? null);
+  // Removed unused `initialParsed`; parse AI summary on demand if needed
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -419,7 +397,7 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
               }}
               className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-medium text-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-blue-50"
               aria-label={submitting ? 'Sending report email' : 'Send full report to email'}
-              aria-busy={submitting ? "true" : "false"}
+              aria-busy={submitting}
             >
               {submitting ? (
                 <>

@@ -257,7 +257,41 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
     const technologies = scanResults.techStack?.detected?.map((t) => t.name) || [];
     const exposedEndpoints = scanResults.api?.endpoints?.map((e) => e.path) || [];
 
-    // Generate Professional Multi-Page PDF
+    // Save scan results FIRST so the frontend can display them immediately.
+    // PDF generation happens afterwards as an optional step.
+    const { error: updateError } = await supabase
+      .from("scan_results")
+      .update({
+        scan_status: "completed",
+        overall_score: overallScore,
+        e2e_results: scanResults.e2e,
+        api_results: scanResults.api,
+        security_results: scanResults.security,
+        performance_results: scanResults.performance,
+        accessibility_results: scanResults.accessibility,
+        tech_stack: scanResults.techStack,
+        top_issues: topIssues,
+        ai_summary: aiSummary,
+        ai_recommendations: aiRecommendations,
+        performance_score: performanceScore,
+        seo_score: seoScore,
+        accessibility_issue_count: accessibilityIssueCount,
+        security_checks_passed: securityChecksPassed,
+        security_checks_total: 7,
+        technologies: technologies,
+        exposed_endpoints: exposedEndpoints,
+        og_image: ogImage,
+      })
+      .eq("id", scanId);
+
+    if (updateError) {
+      console.error("Update error:", updateError);
+      throw updateError;
+    }
+
+    console.log("Scan results saved successfully — frontend can now display results");
+
+    // Generate Professional Multi-Page PDF (optional — failures don't affect scan results)
     let pdfBase64: string | null = null;
     try {
       console.log("Generating comprehensive PDF...");
@@ -1349,42 +1383,21 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
       // Convert bytes to base64 without spreading the full array (avoids stack overflow)
       pdfBase64 = btoa(Array.from(new Uint8Array(pdfBytes), (b) => String.fromCharCode(b)).join(''));
       console.log(`Comprehensive PDF generated. Size: ${(pdfBytes.length / 1024).toFixed(2)} KB, Pages: ${pageNum - 1}`);
+
+      // Store the PDF — this is a best-effort update; failure does not affect displayed results
+      const { error: pdfUpdateError } = await supabase
+        .from("scan_results")
+        .update({ pdf_report: pdfBase64 })
+        .eq("id", scanId);
+
+      if (pdfUpdateError) {
+        console.error("Failed to store PDF in scan_results:", pdfUpdateError);
+      } else {
+        console.log("Scan completed successfully with PDF generated and stored");
+      }
     } catch (pdfErr) {
       console.error("PDF generation error:", pdfErr);
     }
-
-    const { error: updateError } = await supabase
-      .from("scan_results")
-      .update({
-        scan_status: "completed",
-        overall_score: overallScore,
-        e2e_results: scanResults.e2e,
-        api_results: scanResults.api,
-        security_results: scanResults.security,
-        performance_results: scanResults.performance,
-        accessibility_results: scanResults.accessibility,
-        tech_stack: scanResults.techStack,
-        top_issues: topIssues,
-        ai_summary: aiSummary,
-        ai_recommendations: aiRecommendations,
-        performance_score: performanceScore,
-        seo_score: seoScore,
-        accessibility_issue_count: accessibilityIssueCount,
-        security_checks_passed: securityChecksPassed,
-        security_checks_total: 7,
-        technologies: technologies,
-        exposed_endpoints: exposedEndpoints,
-        og_image: ogImage,
-        pdf_report: pdfBase64,
-      })
-      .eq("id", scanId);
-
-    if (updateError) {
-      console.error("Update error:", updateError);
-      throw updateError;
-    }
-
-     console.log("Scan completed successfully with PDF generated and stored");
   } catch (error) {
     console.error("Scan processing error:", error);
 

@@ -1374,6 +1374,7 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
         security_checks_total: 7,
         technologies: technologies,
         exposed_endpoints: exposedEndpoints,
+        og_image: ogImage,
         pdf_report: pdfBase64,
       })
       .eq("id", scanId);
@@ -2172,7 +2173,7 @@ function extractOGImage(htmlContent: string, baseUrl: string): string | null {
       if (imageUrl.startsWith('/')) {
         try {
           const url = new URL(baseUrl);
-          imageUrl = `${url.protocol}//${url.hostname}${imageUrl}`;
+          imageUrl = `${url.protocol}//${url.host}${imageUrl}`;
           console.log(`OG image (relative) resolved to: ${imageUrl}`);
           return imageUrl;
         } catch (e) {

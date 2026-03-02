@@ -244,7 +244,7 @@ function App() {
                     <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0 animate-pulse">
                       <Loader2 className="w-3 h-3 text-white animate-spin" />
                     </div>
-                    <span className="text-gray-700 font-medium">Performance analysis (Google PageSpeed)</span>
+                    <span className="text-gray-700 font-medium">Checking Performance analysis</span>
                   </div>
                   <div className="flex items-center gap-3 text-sm">
                     <div className="w-5 h-5 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0"></div>

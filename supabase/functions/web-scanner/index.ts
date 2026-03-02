@@ -1,7 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { PDFDocument, PDFPage, rgb } from "npm:pdf-lib";
-import PdfPng from "npm:pdf-lib/cjs/core/embedders/PngEmbedder.js";
+import { PDFDocument, rgb } from "npm:pdf-lib";
 
 // Type definitions for scan results (duplicated from src/types/scan.ts for Deno compatibility)
 type PerformanceResults = {
@@ -1347,7 +1346,8 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
       }
       
       const pdfBytes = await pdfDoc.save();
-      pdfBase64 = btoa(String.fromCharCode(...new Uint8Array(pdfBytes)));
+      // Convert bytes to base64 without spreading the full array (avoids stack overflow)
+      pdfBase64 = btoa(Array.from(new Uint8Array(pdfBytes), (b) => String.fromCharCode(b)).join(''));
       console.log(`Comprehensive PDF generated. Size: ${(pdfBytes.length / 1024).toFixed(2)} KB, Pages: ${pageNum - 1}`);
     } catch (pdfErr) {
       console.error("PDF generation error:", pdfErr);

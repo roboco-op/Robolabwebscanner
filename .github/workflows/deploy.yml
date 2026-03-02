@@ -26,19 +26,19 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      # 4. Install Supabase CLI
+      # 4.Install Supabase CLI (OFFICIAL METHOD)
       - name: Install Supabase CLI
-        run: |
-          curl -fsSL https://supabase.com/install.sh | sh
-          echo "$HOME/.supabase/bin" >> $GITHUB_PATH
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
 
       # 5. Deploy Supabase Edge Functions
       - name: Deploy Supabase Edge Functions
-        run: |
-          supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
-          supabase functions deploy --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
+          supabase functions deploy
 
       # 6. OPTIONAL - Run Supabase Migrations (Safe if using migration files)
       - name: Run Supabase Migrations

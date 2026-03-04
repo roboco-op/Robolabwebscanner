@@ -7,12 +7,13 @@ export function LegalBanner() {
         <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" aria-hidden="true" />
         <div className="text-sm text-blue-900">
           <p id="legal-banner-title" className="font-medium mb-1">Terms of Service</p>
-          <p className="text-blue-800">
-            By submitting a URL, you confirm you have permission to scan this website.
-            We perform non-intrusive, read-only analysis respecting robots.txt.
-            Scans are throttled per domain. Results stored for 30 days unless opted in.
-            PII in URLs will be redacted.
-          </p>
+          <ul className="text-blue-800 list-disc pl-5 space-y-1">
+            <li>By submitting a URL, you confirm you own the website or have explicit permission to scan it.</li>
+            <li>Scans are automated, read-only, and respect publicly available crawling rules with domain-level throttling.</li>
+            <li>You agree not to use this service for unlawful, abusive, or unauthorized testing.</li>
+            <li>Results are stored for up to 30 days unless you opt in for extended retention; PII in URLs is redacted where reasonably possible.</li>
+            <li>This service is provided “as is” without warranties, and we are not liable for any damages arising from its use.</li>
+          </ul>
         </div>
       </div>
     </div>

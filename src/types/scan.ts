@@ -110,6 +110,7 @@ export interface ScanResult {
   tech_stack?: TechStackResult;
   top_issues: TopIssue[];
   og_image?: string | null;
+  preview_image_source?: 'og' | 'twitter' | 'jsonld' | 'first_img' | 'none' | null;
   wcag_results?: WCAGResults;
   created_at: string;
   expires_at: string;

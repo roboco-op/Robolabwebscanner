@@ -1,6 +1,6 @@
--- Add pdf_report column to scan_results if it doesn't exist
-ALTER TABLE scan_results ADD COLUMN IF NOT EXISTS pdf_report TEXT;
+-- Cleanup legacy PDF schema fields
+ALTER TABLE scan_results DROP COLUMN IF EXISTS pdf_report;
+ALTER TABLE email_submissions DROP COLUMN IF EXISTS pdf_sent;
 
--- Verify column was created
-SELECT column_name, data_type FROM information_schema.columns 
-WHERE table_name = 'scan_results' AND column_name = 'pdf_report';
+-- Ensure current preview image source column exists
+ALTER TABLE scan_results ADD COLUMN IF NOT EXISTS preview_image_source TEXT;

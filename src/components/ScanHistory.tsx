@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Trash2, Eye, Download, Calendar, TrendingUp } from 'lucide-react';
+import { Trash2, Eye, Calendar, TrendingUp } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 import type { ScanResult } from '../types/scan';
 
@@ -223,20 +223,6 @@ export function ScanHistory() {
                       title="View Details"
                     >
                       <Eye className="w-4 h-4 text-blue-600" />
-                    </button>
-                    <button
-                      onClick={() => console.log('Download:', scan.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          console.log('Download:', scan.id);
-                        }
-                      }}
-                      className="p-2 hover:bg-green-100 rounded-lg transition focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
-                      aria-label={`Download PDF report for ${scan.target_url}`}
-                      title="Download PDF"
-                    >
-                      <Download className="w-4 h-4 text-green-600" />
                     </button>
                     <button
                       onClick={() => deleteScan(scan.id)}

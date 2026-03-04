@@ -57,14 +57,7 @@ Deno.serve(async (req: Request) => {
 
     console.log(`Report generated. HTML: ${htmlReport.length} chars, Text: ${textReport.length} chars`);
 
-    // Use pre-generated PDF from database (generated during scan completion)
-    const pdfBase64 = scanResult.pdf_report || null;
-    
-    if (pdfBase64) {
-      console.log("Using pre-generated PDF from database");
-    } else {
-      console.log("No PDF available - was not generated during scan");
-    }
+    console.log("Preparing email report");
 
     if (RESEND_API_KEY) {
       console.log("Sending email via Resend...");
@@ -77,18 +70,6 @@ Deno.serve(async (req: Request) => {
           html: htmlReport,
           text: textReport,
         };
-
-        // Add PDF attachment if available
-        if (pdfBase64) {
-          emailPayload.attachments = [
-            {
-              filename: `website-scan-${scanResult.target_url.replace(/[^a-z0-9]/gi, '_')}.pdf`,
-              content: pdfBase64,
-              content_type: "application/pdf",
-            }
-          ];
-          console.log("PDF attached to email");
-        }
 
         const emailResponse = await fetch("https://api.resend.com/emails", {
           method: "POST",
@@ -108,18 +89,11 @@ Deno.serve(async (req: Request) => {
         const emailData = await emailResponse.json();
         console.log("Email sent successfully:", emailData);
 
-        await supabase
-          .from("email_submissions")
-          .update({ pdf_sent: pdfBase64 ? true : false })
-          .eq("scan_id", scanId)
-          .eq("email", email);
-
         return new Response(
           JSON.stringify({ 
             success: true, 
             message: "Report sent successfully",
-            emailId: emailData.id,
-            pdfAttached: pdfBase64 ? true : false
+            emailId: emailData.id
           }),
           {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -133,12 +107,6 @@ Deno.serve(async (req: Request) => {
       console.log("RESEND_API_KEY not configured, using mock mode");
       console.log(`Report would be sent to: ${email}`);
       console.log(`Report length: ${textReport.length} characters`);
-
-      await supabase
-        .from("email_submissions")
-        .update({ pdf_sent: false })
-        .eq("scan_id", scanId)
-        .eq("email", email);
 
       return new Response(
         JSON.stringify({ 

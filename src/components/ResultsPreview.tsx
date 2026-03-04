@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Shield, Zap, Eye, AlertTriangle, Mail, Loader2, CheckCircle, Search, Lock, BarChart3, Calendar } from 'lucide-react';
 import type { ScanResult } from '../types/scan';
 
@@ -14,6 +14,7 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
+  const [previewImageFailed, setPreviewImageFailed] = useState(false);
   
   // parseAISummary was removed because it's unused; parse AI summary on demand if needed
   
@@ -47,6 +48,14 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
   };
 
   const isScanning = result.scan_status === 'pending' || result.scan_status === 'processing';
+  const previewImageUrl = !isScanning && !previewImageFailed ? result.og_image : null;
+  const previewImageSource = result.preview_image_source && result.preview_image_source !== 'none'
+    ? result.preview_image_source
+    : null;
+
+  useEffect(() => {
+    setPreviewImageFailed(false);
+  }, [result.id, result.og_image]);
 
   const MetricSkeletonLoader = () => (
     <div className="bg-gray-50 rounded-lg shadow p-6 border-l-4 border-gray-300">
@@ -86,6 +95,28 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Scan Results</h2>
           <p className="text-gray-600">Detailed technical analysis of your website</p>
         </div>
+
+      {!isScanning && (
+        <div className="mb-8 bg-gray-50 rounded-lg border border-gray-200 p-5">
+          <h3 className="text-lg font-bold text-gray-900 mb-3">Website Preview</h3>
+          {previewImageUrl ? (
+            <img
+              src={previewImageUrl}
+              alt={`Preview for ${result.target_url}`}
+              className="w-full max-h-64 object-cover rounded-lg border border-gray-200"
+              onError={() => setPreviewImageFailed(true)}
+              loading="lazy"
+            />
+          ) : (
+            <div className="w-full h-40 rounded-lg border border-dashed border-gray-300 bg-white flex items-center justify-center text-sm text-gray-500 text-center px-4">
+              No preview image available for this page.
+            </div>
+          )}
+          {previewImageSource && (
+            <p className="mt-2 text-xs text-gray-500">Source: {previewImageSource}</p>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         {isScanning ? (
@@ -334,7 +365,7 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
             <Mail className="w-12 h-12 text-blue-600 mx-auto mb-3" />
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Get Your Full Report</h2>
             <p className="text-gray-700">
-              Detailed analysis with actionable recommendations delivered as a PDF
+              Detailed analysis with actionable recommendations delivered to your email
             </p>
           </div>
 

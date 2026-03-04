@@ -18,17 +18,20 @@ try {
     console.log("Database connection successful!");
     console.log("First scan_result columns:", Object.keys(data?.[0] || {}));
     
-    // Check if pdf_report exists
+    // Check current preview image fields and ensure legacy PDF field is removed
     if (data && data[0]) {
+      const hasOgImage = "og_image" in data[0];
+      const hasPreviewSource = "preview_image_source" in data[0];
       const hasPdfReport = "pdf_report" in data[0];
-      console.log(`\npdf_report column exists: ${hasPdfReport}`);
+
+      console.log(`\nog_image column exists: ${hasOgImage}`);
+      console.log(`preview_image_source column exists: ${hasPreviewSource}`);
+      console.log(`legacy pdf_report column exists (should be false): ${hasPdfReport}`);
       
-      if (!hasPdfReport) {
-        console.log("\n⚠️  pdf_report column NOT FOUND - you need to run the migration!");
-        console.log("\nRun this SQL in Supabase Dashboard > SQL Editor:");
-        console.log("ALTER TABLE scan_results ADD COLUMN IF NOT EXISTS pdf_report TEXT;");
+      if (!hasOgImage || !hasPreviewSource) {
+        console.log("\n⚠️  Missing expected preview-image columns. Run latest migrations.");
       } else {
-        console.log("✅ pdf_report column found - you're all set!");
+        console.log("✅ Current schema fields are present.");
       }
     }
   }

@@ -52,7 +52,6 @@ This document outlines all keyboard navigation features and ARIA accessibility i
 
 - **Action Buttons in Table**
   - View button: **Tab** to focus, **Enter**/**Space** to open scan
-  - Download button: **Tab** to focus, **Enter**/**Space** to download PDF
   - Delete button: **Tab** to focus, **Enter**/**Space** to delete (with confirmation)
 
 #### ProgressCharts
@@ -90,7 +89,7 @@ Provides accessible name for elements without visible text:
 ```html
 <button aria-label="Close modal">
 <button aria-label="View scan results for example.com">
-<a aria-label="Download PDF for example.com">
+<button aria-label="Delete scan for example.com">
 ```
 
 #### aria-labelledby

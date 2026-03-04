@@ -88,20 +88,19 @@
 
 ## Testing Recommendations
 
-1. **Run a new scan** on any URL to test the updated PDF generation
+1. **Run a new scan** on any URL to test the updated scan and report flow
 2. **Request an email report** to see:
    - Larger logo in email header
-   - 4-page PDF attachment with all content
+   - Full report content in the email body
    - Professional formatting throughout
-3. **Verify PDF contains**:
+3. **Verify report contains**:
    - Executive summary with overall score
    - All issues found
    - Security & performance details
    - AI analysis and recommendations
-   - Proper page numbering and headers
 
 ## Deployment Status
-✅ **web-scanner** - Deployed (Version with 4-page professional PDF)
+✅ **web-scanner** - Deployed (Version without PDF generation)
 ✅ **send-report** - Deployed (Version with larger email logo)
 
 All functions are live and ready for production testing.

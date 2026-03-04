@@ -19,7 +19,9 @@ async function checkColumn() {
   if (data && data.length > 0) {
     const columns = Object.keys(data[0]);
     console.log('Columns in scan_results:', columns);
-    console.log('Has pdf_report column:', columns.includes('pdf_report'));
+    console.log('Has og_image column:', columns.includes('og_image'));
+    console.log('Has preview_image_source column:', columns.includes('preview_image_source'));
+    console.log('Has legacy pdf_report column (should be false):', columns.includes('pdf_report'));
   } else {
     console.log('No rows in scan_results table');
   }

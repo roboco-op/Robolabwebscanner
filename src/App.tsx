@@ -218,7 +218,7 @@ function App() {
                     <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0 animate-pulse">
                       <Loader2 className="w-3 h-3 text-white animate-spin" />
                     </div>
-                    <span className="text-gray-700 font-medium">Performance analysis</span>
+                    <span className="text-gray-700 font-medium">Checking Performance analysis</span>
                   </div>
                   <div className="flex items-center gap-3 text-sm">
                     <div className="w-5 h-5 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0"></div>
@@ -246,35 +246,41 @@ function App() {
             </div>
           )}
 
-          {!scanResult && !scanning && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 w-full max-w-5xl mt-8">
-              <FeatureCard
-                icon="🔒"
-                title="Security"
-                description="TLS, HSTS, headers, cookie flags"
-              />
-              <FeatureCard
-                icon="⚡"
-                title="Performance"
-                description="Lighthouse metrics, LCP, CLS, TBT"
-              />
-              <FeatureCard
-                icon="👁️"
-                title="Accessibility"
-                description="WCAG compliance via axe-core"
-              />
-              <FeatureCard
-                icon="🔌"
-                title="API Analysis"
-                description="Endpoints, status codes, hygiene"
-              />
-            </div>
-          )}
         </div>
 
         <footer className="text-center mt-16 text-sm text-gray-500">
           <p>Non-intrusive scans only • Respects robots.txt • Results stored 30 days</p>
         </footer>
+
+        {!scanResult && !scanning && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 w-full max-w-6xl mt-8">
+            <FeatureCard
+              icon="🔒"
+              title="Security"
+              description="TLS, HSTS, headers, cookie flags"
+            />
+            <FeatureCard
+              icon="⚡"
+              title="Performance"
+              description="Lighthouse metrics, LCP, CLS, TBT"
+            />
+            <FeatureCard
+              icon="👁️"
+              title="Accessibility"
+              description="WCAG compliance via axe-core"
+            />
+            <FeatureCard
+              icon="🔌"
+              title="API Analysis"
+              description="Endpoints, status codes, hygiene"
+            />
+            <FeatureCard
+              icon="🧪"
+              title="E2E"
+              description="Buttons, forms, links, and user flows"
+            />
+          </div>
+        )}
       </div>
     </div>
   );

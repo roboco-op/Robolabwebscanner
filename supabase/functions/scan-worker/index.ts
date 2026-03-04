@@ -7,7 +7,6 @@ const corsHeaders = {
 };
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const MAX_JOBS_PER_RUN = Number(Deno.env.get("SCAN_WORKER_BATCH_SIZE") ?? "3");
 
 Deno.serve(async (req: Request) => {
@@ -15,9 +14,9 @@ Deno.serve(async (req: Request) => {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
 
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  if (!SUPABASE_URL) {
     return new Response(
-      JSON.stringify({ error: "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY" }),
+      JSON.stringify({ error: "Missing SUPABASE_URL" }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -37,8 +36,6 @@ Deno.serve(async (req: Request) => {
       const response = await fetch(workerUrl, {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-          "apikey": SUPABASE_SERVICE_ROLE_KEY,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ mode: "process-next" }),

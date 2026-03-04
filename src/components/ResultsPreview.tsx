@@ -216,23 +216,6 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
         </div>
       )}
 
-      {result.e2e_results && (
-        <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg p-6 mb-8 border border-purple-200">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg flex items-center justify-center shadow">
-              <Mail className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-gray-900">Interactive Elements Analysis</h3>
-              <p className="text-xs text-gray-600">Detailed testing results sent to your email</p>
-            </div>
-          </div>
-          <div className="bg-purple-50 rounded-lg p-4 border border-purple-200 shadow-sm">
-            <p className="text-sm text-gray-700">For a comprehensive analysis of interactive elements on your site, check your email for the full detailed report.</p>
-          </div>
-        </div>
-      )}
-
       {result.performance_results?.core_web_vitals && result.performance_results?.source === 'google-pagespeed' && (
         <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg p-6 mb-8 border border-green-200">
           <div className="flex items-center gap-2 mb-4">
@@ -385,6 +368,23 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
           </div>
         </div>
       </div>
+
+      {result.e2e_results && (
+        <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg p-6 mb-8 border border-purple-200">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg flex items-center justify-center shadow">
+              <Mail className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">Interactive Elements Analysis</h3>
+              <p className="text-xs text-gray-600">Detailed testing results sent to your email</p>
+            </div>
+          </div>
+          <div className="bg-purple-50 rounded-lg p-4 border border-purple-200 shadow-sm">
+            <p className="text-sm text-gray-700">For a comprehensive analysis of interactive elements on your site, check your email for the full detailed report.</p>
+          </div>
+        </div>
+      )}
 
       {!submitted ? (
         <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg shadow-lg p-8 border border-blue-200">

@@ -201,19 +201,20 @@ function generateHTMLReport(scanResult: DBScanRow): string {
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #1f2937; max-width: 800px; margin: 0 auto; padding: 20px; background-color: #f9fafb;">
 
-  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:800px;margin:0 auto 30px;border-collapse:collapse;" bgcolor="#1e40af">
+  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:800px;margin:0 auto 30px;border-collapse:collapse;" bgcolor="#f8fbff">
     <tr>
-      <td bgcolor="#1e40af" style="padding:50px 40px;text-align:center;border:3px solid #3b82f6;">
-        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;" bgcolor="#1e40af">
+      <td bgcolor="#f8fbff" style="padding:42px 36px;text-align:center;border:2px solid #bfdbfe;border-radius:12px;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;" bgcolor="#f8fbff">
           <tr>
-            <td align="center" bgcolor="#1e40af">
-              <font face="Arial, Helvetica, sans-serif" color="#3b82f6" style="font-size:40px;font-weight:bold;letter-spacing:2px;">Robo</font>
-              <font face="Arial, Helvetica, sans-serif" color="#1e40af" style="font-size:40px;font-weight:bold;letter-spacing:2px;">Lab</font>
-              <font face="Arial, Helvetica, sans-serif" color="#1e40af" style="font-size:16px;vertical-align:super;">&#174;</font>
+            <td align="center" bgcolor="#f8fbff">
+              <font face="Arial, Helvetica, sans-serif" color="#1d4ed8" style="font-size:40px;font-weight:bold;letter-spacing:1px;">Robo Lab</font>
+              <font face="Arial, Helvetica, sans-serif" color="#111827" style="font-size:18px;vertical-align:super;">&#174;</font>
               <br/>
-              <font face="Arial, Helvetica, sans-serif" color="#3b82f6" style="font-size:30px;font-weight:bold;letter-spacing:-0.5px;">Web Scanner AI Report</font>
+              <font face="Arial, Helvetica, sans-serif" color="#2563eb" style="font-size:44px;font-weight:800;line-height:1.1;">Web Scanner AI Report</font>
               <br/>
-              <font face="Arial, Helvetica, sans-serif" color="#dbeafe" style="font-size:14px;letter-spacing:0.5px;">Comprehensive Security & Performance Analysis</font>
+              <font face="Arial, Helvetica, sans-serif" color="#111827" style="font-size:16px;letter-spacing:0.5px;">Comprehensive Scanned Analysis</font>
+              <br/>
+              <a href="https://www.webscanner.robo-lab.io" style="display:inline-block;margin-top:14px;font-family:Arial, Helvetica, sans-serif;font-size:18px;color:#111827;text-decoration:none;font-weight:600;">🌐 www.webscanner.robo-lab.io</a>
             </td>
           </tr>
         </table>

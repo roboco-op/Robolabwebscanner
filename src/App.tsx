@@ -123,7 +123,7 @@ function App() {
       <header className="sticky top-0 z-50 bg-white shadow-sm border-b border-gray-200">
         <div className="container mx-auto px-6 py-4">
           <div className="flex justify-between items-center max-w-7xl mx-auto">
-            <button onClick={handleNewScan} className="cursor-pointer bg-transparent border-none p-0">
+            <button onClick={() => window.location.reload()} className="cursor-pointer bg-transparent border-none p-0">
               <img src="/image copy.png" alt="RoboLab Logo" className="h-8 md:h-10 hover:opacity-80 transition-opacity" />
             </button>
             <button
@@ -246,41 +246,41 @@ function App() {
             </div>
           )}
 
+          {!scanResult && !scanning && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 w-full max-w-6xl mt-8">
+              <FeatureCard
+                icon="🔒"
+                title="Security"
+                description="TLS, HSTS, headers, cookie flags"
+              />
+              <FeatureCard
+                icon="⚡"
+                title="Performance"
+                description="Lighthouse metrics, LCP, CLS, TBT"
+              />
+              <FeatureCard
+                icon="👁️"
+                title="Accessibility"
+                description="WCAG compliance via axe-core"
+              />
+              <FeatureCard
+                icon="🔌"
+                title="API Analysis"
+                description="Endpoints, status codes, hygiene"
+              />
+              <FeatureCard
+                icon="🧪"
+                title="E2E"
+                description="Buttons, forms, links, and user flows"
+              />
+            </div>
+          )}
+
         </div>
 
         <footer className="text-center mt-16 text-sm text-gray-500">
           <p>Non-intrusive scans only • Respects robots.txt • Results stored 30 days</p>
         </footer>
-
-        {!scanResult && !scanning && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 w-full max-w-6xl mt-8">
-            <FeatureCard
-              icon="🔒"
-              title="Security"
-              description="TLS, HSTS, headers, cookie flags"
-            />
-            <FeatureCard
-              icon="⚡"
-              title="Performance"
-              description="Lighthouse metrics, LCP, CLS, TBT"
-            />
-            <FeatureCard
-              icon="👁️"
-              title="Accessibility"
-              description="WCAG compliance via axe-core"
-            />
-            <FeatureCard
-              icon="🔌"
-              title="API Analysis"
-              description="Endpoints, status codes, hygiene"
-            />
-            <FeatureCard
-              icon="🧪"
-              title="E2E"
-              description="Buttons, forms, links, and user flows"
-            />
-          </div>
-        )}
       </div>
     </div>
   );

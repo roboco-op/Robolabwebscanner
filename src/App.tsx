@@ -18,6 +18,8 @@ function App() {
       return;
     }
 
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
     const pollInterval = setInterval(async () => {
       const { data } = await supabase
         .from('scan_results')
@@ -37,6 +39,7 @@ function App() {
   }, [scanResult]);
 
   const handleScan = async (url: string) => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     setScanning(true);
     setScanResult(null);
     setErrorMessage('');
@@ -86,6 +89,10 @@ function App() {
 
   const handleEmailSubmit = async (email: string, optIn: boolean) => {
     if (!scanResult) return;
+
+    if (scanResult.scan_status !== 'completed') {
+      throw new Error('Scanning in progress, input your email and click send once scanning is completed.');
+    }
 
     const { error: insertError } = await supabase
       .from('email_submissions')
@@ -199,6 +206,12 @@ function App() {
                     <span className="text-gray-700">Security scan</span>
                   </div>
                   <div className="flex items-center gap-3 text-sm">
+                    <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0 animate-pulse">
+                      <Loader2 className="w-3 h-3 text-white animate-spin" />
+                    </div>
+                    <span className="text-gray-700 font-medium">Checking Performance analysis</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
                     <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
                       <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
@@ -212,13 +225,15 @@ function App() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                       </svg>
                     </div>
-                    <span className="text-gray-700">E2E testing analysis</span>
+                    <span className="text-gray-700">API Analysis</span>
                   </div>
                   <div className="flex items-center gap-3 text-sm">
-                    <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0 animate-pulse">
-                      <Loader2 className="w-3 h-3 text-white animate-spin" />
+                    <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+                      <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                      </svg>
                     </div>
-                    <span className="text-gray-700 font-medium">Checking Performance analysis</span>
+                    <span className="text-gray-700">E2E testing analysis</span>
                   </div>
                   <div className="flex items-center gap-3 text-sm">
                     <div className="w-5 h-5 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0"></div>

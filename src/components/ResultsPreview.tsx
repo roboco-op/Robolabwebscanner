@@ -35,7 +35,11 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
       setSubmitted(true);
     } catch (e) {
       console.error(e);
-      setError('Failed to send report. Please try again.');
+      if (e instanceof Error && e.message) {
+        setError(e.message);
+      } else {
+        setError('Failed to send report. Please try again.');
+      }
     } finally {
       setSubmitting(false);
     }

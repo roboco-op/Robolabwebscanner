@@ -1,0 +1,83 @@
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+};
+
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const MAX_JOBS_PER_RUN = Number(Deno.env.get("SCAN_WORKER_BATCH_SIZE") ?? "3");
+
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 200, headers: corsHeaders });
+  }
+
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    return new Response(
+      JSON.stringify({ error: "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY" }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
+  }
+
+  try {
+    const workerUrl = `${SUPABASE_URL}/functions/v1/web-scanner`;
+    const batchLimit = Number.isFinite(MAX_JOBS_PER_RUN) && MAX_JOBS_PER_RUN > 0
+      ? Math.min(MAX_JOBS_PER_RUN, 10)
+      : 3;
+
+    const processed: Array<Record<string, unknown>> = [];
+
+    for (let index = 0; index < batchLimit; index += 1) {
+      const response = await fetch(workerUrl, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          "apikey": SUPABASE_SERVICE_ROLE_KEY,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ mode: "process-next" }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`web-scanner worker call failed (${response.status}): ${errorText}`);
+      }
+
+      const result = await response.json();
+      processed.push(result);
+
+      if (!result?.processed) {
+        break;
+      }
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        runs: processed.length,
+        processed,
+      }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
+  } catch (error) {
+    return new Response(
+      JSON.stringify({
+        error: "scan-worker execution failed",
+        message: error instanceof Error ? error.message : "Unknown error",
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
+  }
+});

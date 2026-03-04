@@ -291,21 +291,6 @@ function generateHTMLReport(scanResult: DBScanRow): string {
   </div>
 
   <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-    <h2 style="color: #111827; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">📊 Accessibility & Performance Report</h2>
-    <p style="line-height: 1.8; color: #374151;">
-      ${scanResult.target_url || 'Your website'} has a ${scanResult.overall_score || 0}/100 score 
-      ${scanResult.security_results?.issues && scanResult.security_results.issues.length === 0 ? 'with no security issues' : 'with security considerations'}, 
-      but needs accessibility improvements and performance monitoring.
-    </p>
-    <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin-top: 15px; border-radius: 4px;">
-      <h3 style="margin-top: 0; color: #92400e;">Note</h3>
-      <p style="margin: 8px 0; color: #78350f;">
-        Book a consultation with QA experts to implement the recommended accessibility and performance improvements.<a href="https://timerex.net/s/sales_5e77_b801/482a66cf?apiKey=1ufKAEnDi4T0pk5lftqMqjiNmF5SQh8x3Va4pLe5oitNLtgKCuI7BKH5sI0SGLeI" style="color: #3b82f6; text-decoration: underline;">here</a>
-      </p>
-    </div>
-  </div>
-
-  <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
     <h2 style="color: #111827; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">⚡ Detailed Performance Analysis</h2>
     <p><strong>Score:</strong> <span style="color: ${scoreColor(scanResult.performance_results?.score || 0)};">${scanResult.performance_results?.score || 'N/A'}/100</span></p>
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
@@ -345,6 +330,22 @@ function generateHTMLReport(scanResult: DBScanRow): string {
   </div>
 
   <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+    <h2 style="color: #111827; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">🔌 API Analysis</h2>
+    <p><strong>Endpoints Detected:</strong> ${scanResult.api_results?.endpoints_detected || 0}</p>
+
+    ${scanResult.api_results?.endpoints && scanResult.api_results.endpoints.length > 0 ? `
+      <h3 style="color: #374151; font-size: 16px; margin-top: 20px;">Endpoints:</h3>
+      <ul style="list-style: none; padding: 0; color: #374151;">
+        ${scanResult.api_results.endpoints.map((endpoint: APIEndpoint) => `
+          <li style="padding: 8px 0; border-bottom: 1px solid #f3f4f6;">
+            • ${endpoint.method} ${endpoint.path}
+          </li>
+        `).join('')}
+      </ul>
+    ` : '<p style="color: #9ca3af;">No endpoints detected</p>'}
+  </div>
+
+  <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
     <h2 style="color: #111827; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">🤖 End-to-End Testing Insights</h2>
     <p><strong>Buttons Found:</strong> ${scanResult.e2e_results?.buttons_found || 0}</p>
     <p><strong>Links Found:</strong> ${scanResult.e2e_results?.links_found || 0}</p>
@@ -360,6 +361,21 @@ function generateHTMLReport(scanResult: DBScanRow): string {
         `).join('')}
       </ul>
     ` : '<p style="color: #9ca3af;">No primary actions detected</p>'}
+  </div>
+
+  <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+    <h2 style="color: #111827; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">📊 Accessibility & Performance Report</h2>
+    <p style="line-height: 1.8; color: #374151;">
+      ${scanResult.target_url || 'Your website'} has a ${scanResult.overall_score || 0}/100 score 
+      ${scanResult.security_results?.issues && scanResult.security_results.issues.length === 0 ? 'with no security issues' : 'with security considerations'}, 
+      but needs accessibility improvements and performance monitoring.
+    </p>
+    <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin-top: 15px; border-radius: 4px;">
+      <h3 style="margin-top: 0; color: #92400e;">Note</h3>
+      <p style="margin: 8px 0; color: #78350f;">
+        Book a consultation with QA experts to implement the recommended accessibility and performance improvements.<a href="https://timerex.net/s/sales_5e77_b801/482a66cf?apiKey=1ufKAEnDi4T0pk5lftqMqjiNmF5SQh8x3Va4pLe5oitNLtgKCuI7BKH5sI0SGLeI" style="color: #3b82f6; text-decoration: underline;">here</a>
+      </p>
+    </div>
   </div>
 
   <div style="background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%); border-radius: 12px; padding: 30px; text-align: center;">

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Shield, Zap, Eye, AlertTriangle, Mail, Loader2, CheckCircle, Search, Lock, BarChart3, Calendar } from 'lucide-react';
+import { Shield, Zap, Eye, AlertTriangle, Mail, Loader2, CheckCircle, Lock, BarChart3, Calendar } from 'lucide-react';
 import type { ScanResult } from '../types/scan';
 
 interface ResultsPreviewProps {
@@ -133,6 +133,17 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
           </>
         ) : (
           <>
+            <div className="bg-gray-50 rounded-lg shadow p-6 border-l-4 border-red-500">
+              <div className="flex items-center justify-between mb-2">
+                <Shield className="w-8 h-8 text-red-600" />
+                <span className="text-3xl font-bold text-gray-900">
+                  {result.security_checks_passed !== undefined ? `${result.security_checks_passed}/${result.security_checks_total || 7}` : (result.scan_status === 'pending' || result.scan_status === 'processing') ? '—' : '0/7'}
+                </span>
+              </div>
+              <p className="text-sm font-medium text-gray-600">Security</p>
+              <p className="text-xs text-gray-500 mt-1">Security checks passed</p>
+            </div>
+
             <div className="bg-gray-50 rounded-lg shadow p-6 border-l-4 border-green-500">
               <div className="flex items-center justify-between mb-2">
                 <Zap className="w-8 h-8 text-green-600" />
@@ -142,17 +153,6 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
               </div>
               <p className="text-sm font-medium text-gray-600">Performance</p>
               <p className="text-xs text-gray-500 mt-1">Lighthouse Mobile Score</p>
-            </div>
-
-            <div className="bg-gray-50 rounded-lg shadow p-6 border-l-4 border-blue-500">
-              <div className="flex items-center justify-between mb-2">
-                <Search className="w-8 h-8 text-blue-600" />
-                <span className="text-3xl font-bold text-gray-900">
-                  {result.seo_score ?? result.performance_results?.lighthouse_scores?.seo ?? 0}
-                </span>
-              </div>
-              <p className="text-sm font-medium text-gray-600">SEO</p>
-              <p className="text-xs text-gray-500 mt-1">Overall SEO Score</p>
             </div>
 
             <div className="bg-gray-50 rounded-lg shadow p-6 border-l-4 border-orange-500">
@@ -166,15 +166,15 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
               <p className="text-xs text-gray-500 mt-1">Critical & serious issues</p>
             </div>
 
-            <div className="bg-gray-50 rounded-lg shadow p-6 border-l-4 border-red-500">
+            <div className="bg-gray-50 rounded-lg shadow p-6 border-l-4 border-cyan-500">
               <div className="flex items-center justify-between mb-2">
-                <Shield className="w-8 h-8 text-red-600" />
+                <BarChart3 className="w-8 h-8 text-cyan-600" />
                 <span className="text-3xl font-bold text-gray-900">
-                  {result.security_checks_passed !== undefined ? `${result.security_checks_passed}/${result.security_checks_total || 7}` : (result.scan_status === 'pending' || result.scan_status === 'processing') ? '—' : '0/7'}
+                  {result.api_results?.endpoints_detected ?? (result.scan_status === 'pending' || result.scan_status === 'processing' ? '—' : 0)}
                 </span>
               </div>
-              <p className="text-sm font-medium text-gray-600">Security</p>
-              <p className="text-xs text-gray-500 mt-1">Security checks passed</p>
+              <p className="text-sm font-medium text-gray-600">API Analysis</p>
+              <p className="text-xs text-gray-500 mt-1">Endpoints detected</p>
             </div>
 
             <div className="bg-gray-50 rounded-lg shadow p-6 border-l-4 border-purple-500">

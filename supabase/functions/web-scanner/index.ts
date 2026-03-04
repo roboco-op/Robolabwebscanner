@@ -64,8 +64,22 @@ const corsHeaders = {
 };
 
 interface ScanRequest {
-  scanId: string;
-  url: string;
+  scanId?: string;
+  url?: string;
+  mode?: "enqueue" | "process-next";
+}
+
+type ScanJobStatus = "queued" | "retry_wait" | "processing" | "completed" | "dead_letter";
+
+interface ScanJobRow {
+  id: string;
+  scan_id: string;
+  target_url: string;
+  status: ScanJobStatus;
+  attempt_count: number;
+  max_attempts: number;
+  next_run_at: string;
+  leased_until: string | null;
 }
 
 Deno.serve(async (req: Request) => {
@@ -78,24 +92,69 @@ Deno.serve(async (req: Request) => {
 
   try {
     const body: ScanRequest = await req.json();
-    const scanId = body.scanId;
-    const url = body.url;
-
-    console.log(`Starting scan for ${url} with ID ${scanId}`);
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Start processing asynchronously (don't await)
-    processScan(scanId, url, supabase).catch(error => {
-      console.error(`Async scan processing error for ${scanId}:`, error);
-    });
+    if (body.mode === "process-next") {
+      const workerResult = await processNextQueuedJob(supabase);
+      return new Response(
+        JSON.stringify({ success: true, ...workerResult }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
 
-    // Return immediately so function doesn't time out
+    const scanId = body.scanId;
+    const url = body.url;
+
+    if (!scanId || !url) {
+      return new Response(
+        JSON.stringify({ error: "scanId and url are required" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    console.log(`Queueing scan for ${url} with ID ${scanId}`);
+
+    const { error: enqueueError } = await supabase
+      .from("scan_jobs")
+      .upsert({
+        scan_id: scanId,
+        target_url: url,
+        status: "queued",
+        next_run_at: new Date().toISOString(),
+        leased_until: null,
+        last_error: null,
+      }, {
+        onConflict: "scan_id",
+      });
+
+    if (enqueueError) {
+      console.error("Failed to enqueue scan job:", enqueueError);
+      return new Response(
+        JSON.stringify({ error: "Failed to queue scan job" }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    await supabase
+      .from("scan_results")
+      .update({ scan_status: "pending" })
+      .eq("id", scanId);
+
     return new Response(
-      JSON.stringify({ success: true, scanId, message: "Scan started" }),
+      JSON.stringify({ success: true, scanId, message: "Scan queued" }),
       {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -115,7 +174,98 @@ Deno.serve(async (req: Request) => {
   }
 });
 
-async function processScan(scanId: string, url: string, supabase: ReturnType<typeof createClient>) {
+async function processNextQueuedJob(supabase: ReturnType<typeof createClient>) {
+  const nowIso = new Date().toISOString();
+
+  await supabase
+    .from("scan_jobs")
+    .update({
+      status: "retry_wait",
+      leased_until: null,
+      next_run_at: nowIso,
+      last_error: "Worker lease expired; re-queued",
+      updated_at: nowIso,
+    })
+    .eq("status", "processing")
+    .lt("leased_until", nowIso);
+
+  const { data: candidate } = await supabase
+    .from("scan_jobs")
+    .select("id, scan_id, target_url, status, attempt_count, max_attempts, next_run_at, leased_until")
+    .in("status", ["queued", "retry_wait"])
+    .lte("next_run_at", nowIso)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle<ScanJobRow>();
+
+  if (!candidate) {
+    return { processed: false, reason: "no_jobs" };
+  }
+
+  const leaseUntil = new Date(Date.now() + 2 * 60 * 1000).toISOString();
+  const nextAttempt = (candidate.attempt_count || 0) + 1;
+
+  const { data: leasedJob, error: leaseError } = await supabase
+    .from("scan_jobs")
+    .update({
+      status: "processing",
+      leased_until: leaseUntil,
+      attempt_count: nextAttempt,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", candidate.id)
+    .in("status", ["queued", "retry_wait"])
+    .select("id, scan_id, target_url, attempt_count, max_attempts")
+    .maybeSingle<Pick<ScanJobRow, "id" | "scan_id" | "target_url" | "attempt_count" | "max_attempts">>();
+
+  if (leaseError || !leasedJob) {
+    console.warn("Could not lease job", leaseError);
+    return { processed: false, reason: "lease_conflict" };
+  }
+
+  const runResult = await processScan(leasedJob.scan_id, leasedJob.target_url, supabase);
+
+  if (runResult.success) {
+    await supabase
+      .from("scan_jobs")
+      .update({
+        status: "completed",
+        leased_until: null,
+        last_error: null,
+        completed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", leasedJob.id);
+
+    return { processed: true, jobId: leasedJob.id, status: "completed" };
+  }
+
+  const maxAttempts = leasedJob.max_attempts || 3;
+  const attemptCount = leasedJob.attempt_count || 1;
+  const hasRetriesLeft = attemptCount < maxAttempts;
+  const backoffSeconds = Math.min(300, 15 * Math.pow(2, Math.max(0, attemptCount - 1)));
+  const nextRunAt = new Date(Date.now() + backoffSeconds * 1000).toISOString();
+
+  await supabase
+    .from("scan_jobs")
+    .update({
+      status: hasRetriesLeft ? "retry_wait" : "dead_letter",
+      leased_until: null,
+      next_run_at: hasRetriesLeft ? nextRunAt : nowIso,
+      last_error: runResult.error || "Scan failed",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", leasedJob.id);
+
+  return {
+    processed: true,
+    jobId: leasedJob.id,
+    status: hasRetriesLeft ? "retry_wait" : "dead_letter",
+    error: runResult.error || "Scan failed",
+  };
+}
+
+async function processScan(scanId: string, url: string, supabase: ReturnType<typeof createClient>): Promise<{ success: boolean; error?: string }> {
   try {
     await supabase
       .from("scan_results")
@@ -141,13 +291,7 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
           .update({ scan_status: "failed" })
           .eq("id", scanId);
 
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded for this domain" }),
-          {
-            status: 429,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
-        );
+        return { success: false, error: "Rate limit exceeded for this domain" };
       }
 
       await supabase
@@ -297,6 +441,7 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
     }
 
     console.log("Scan completed successfully");
+    return { success: true };
   } catch (error) {
     console.error("Scan processing error:", error);
 
@@ -308,6 +453,8 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
     } catch (updateErr) {
       console.error("Failed to update scan status to failed:", updateErr);
     }
+
+    return { success: false, error: error instanceof Error ? error.message : "Scan processing failed" };
   }
 }
 
@@ -413,14 +560,23 @@ async function performE2EScan(url: string): Promise<PipelineSection<E2EResults>>
       const parser = new DOMParser();
       const doc = parser.parseFromString(html, 'text/html');
 
-      const buttons = Array.from(doc.querySelectorAll('button'));
-      const anchors = Array.from(doc.querySelectorAll('a[href]'));
+      const buttons = Array.from(doc.querySelectorAll('button, [role="button"], input[type="button"], input[type="submit"]'));
+      const anchors = Array.from(doc.querySelectorAll('a[href]')).filter((a) => {
+        const href = (a.getAttribute('href') || '').trim().toLowerCase();
+        return !!href && !href.startsWith('#') && !href.startsWith('javascript:') && !href.startsWith('mailto:');
+      });
       const forms = Array.from(doc.querySelectorAll('form'));
 
       const primaryActions = buttons
-        .map(b => (b.textContent || '').trim())
+        .map((b) => {
+          const text = (b.textContent || '').trim();
+          if (text) return text;
+          return (b as Element).getAttribute('aria-label') || (b as Element).getAttribute('value') || '';
+        })
+        .map((text) => text.trim())
         .filter(Boolean)
-        .slice(0, 5);
+        .filter((text, index, arr) => arr.indexOf(text) === index)
+        .slice(0, 8);
 
       return {
         buttons_found: buttons.length,
@@ -433,15 +589,22 @@ async function performE2EScan(url: string): Promise<PipelineSection<E2EResults>>
       // DOMParser may not be available in some runtimes; fall back to regex-based parsing.
       console.warn('DOMParser not available, falling back to regex parsing for E2E scan');
 
-      const buttonMatches = html.match(/<button[^>]*>([\s\S]*?)<\/button>/gi) || [];
+      const buttonMatches = html.match(/<button[^>]*>([\s\S]*?)<\/button>|<input[^>]*type=["'](?:button|submit)["'][^>]*>/gi) || [];
       const linkMatches = html.match(/<a[^>]*href=["']([^"']*)["'][^>]*>/gi) || [];
       const formMatches = html.match(/<form[^>]*>/gi) || [];
 
       return {
         buttons_found: buttonMatches.length,
-        links_found: linkMatches.length,
+        links_found: linkMatches.filter((link) => {
+          const href = link.match(/href=["']([^"']*)["']/i)?.[1]?.trim().toLowerCase() || '';
+          return !!href && !href.startsWith('#') && !href.startsWith('javascript:') && !href.startsWith('mailto:');
+        }).length,
         forms_found: formMatches.length,
-        primary_actions: buttonMatches.slice(0, 5).map((btn) => btn.replace(/<[^>]*>/g, '').trim()).filter(s => s),
+        primary_actions: buttonMatches
+          .map((btn) => btn.replace(/<[^>]*>/g, '').trim())
+          .filter((s) => s)
+          .filter((s, index, arr) => arr.indexOf(s) === index)
+          .slice(0, 8),
         status: 'completed',
       };
     }
@@ -460,6 +623,7 @@ async function performE2EScan(url: string): Promise<PipelineSection<E2EResults>>
 
 async function performAPIScan(url: string): Promise<PipelineSection<APIResults>> {
   const endpoints: Array<{ method: string; path: string; status: number }> = [];
+  const endpointSet = new Set<string>();
 
   try {
     console.log(`API scan: fetching ${url}`);
@@ -475,15 +639,65 @@ async function performAPIScan(url: string): Promise<PipelineSection<APIResults>>
 
     clearTimeout(timeoutId);
 
-    const html = await response.text();
+    if (!response.ok) {
+      return {
+        error: `HTTP ${response.status}`,
+        endpoints_detected: 0,
+        endpoints: [],
+        status: "failed",
+      };
+    }
 
-    const scriptMatches = html.match(/fetch\(["']([^"']+)["']|axios\.[a-z]+\(["']([^"']+)["']|\$\.ajax\(["']([^"']+)["']/g) || [];
-    scriptMatches.forEach((match) => {
-      const path = match.match(/["']([^"']+)["']/)?.[1];
-      if (path && path.startsWith('/')) {
-        endpoints.push({ method: "GET", path, status: 0 });
+    const html = await response.text();
+    const baseUrl = new URL(url);
+
+    const addEndpoint = (rawPath: string, method = 'GET') => {
+      const trimmed = rawPath?.trim();
+      if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('javascript:') || trimmed.startsWith('mailto:')) {
+        return;
       }
-    });
+
+      let normalizedPath = '';
+      try {
+        const resolved = new URL(trimmed, baseUrl);
+        if (resolved.origin !== baseUrl.origin) return;
+        normalizedPath = `${resolved.pathname}${resolved.search}`;
+      } catch {
+        return;
+      }
+
+      if (!normalizedPath.startsWith('/')) return;
+
+      const key = `${method.toUpperCase()} ${normalizedPath}`;
+      if (endpointSet.has(key)) return;
+
+      endpointSet.add(key);
+      endpoints.push({ method: method.toUpperCase(), path: normalizedPath, status: 0 });
+    };
+
+    const fetchRegex = /fetch\s*\(\s*["']([^"']+)["']/gi;
+    let fetchMatch;
+    while ((fetchMatch = fetchRegex.exec(html)) !== null) {
+      addEndpoint(fetchMatch[1], 'GET');
+    }
+
+    const axiosMethodRegex = /axios\.(get|post|put|patch|delete)\s*\(\s*["']([^"']+)["']/gi;
+    let axiosMethodMatch;
+    while ((axiosMethodMatch = axiosMethodRegex.exec(html)) !== null) {
+      addEndpoint(axiosMethodMatch[2], axiosMethodMatch[1]);
+    }
+
+    const xhrRegex = /\.open\s*\(\s*["'](GET|POST|PUT|PATCH|DELETE)["']\s*,\s*["']([^"']+)["']/gi;
+    let xhrMatch;
+    while ((xhrMatch = xhrRegex.exec(html)) !== null) {
+      addEndpoint(xhrMatch[2], xhrMatch[1]);
+    }
+
+    const formActionRegex = /<form[^>]*action=["']([^"']+)["'][^>]*>/gi;
+    let formMatch;
+    while ((formMatch = formActionRegex.exec(html)) !== null) {
+      addEndpoint(formMatch[1], 'POST');
+    }
 
     return {
       endpoints_detected: endpoints.length,

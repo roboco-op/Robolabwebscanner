@@ -52,6 +52,16 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    if (scanResult.scan_status !== 'completed') {
+      return new Response(
+        JSON.stringify({ error: "Scan is not complete yet. Please wait until processing finishes." }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
     const htmlReport = generateHTMLReport(scanResult as DBScanRow);
     const textReport = generateTextReport(scanResult as DBScanRow);
 
@@ -157,6 +167,39 @@ function parseAISummary(raw: string | null): { summary: string | null; recommend
   }
 }
 
+function getSecurityScore(scanResult: DBScanRow): number | null {
+  if (typeof scanResult.security_results?.score === 'number') {
+    return scanResult.security_results.score;
+  }
+
+  if (typeof scanResult.security_checks_passed === 'number' && typeof scanResult.security_checks_total === 'number' && scanResult.security_checks_total > 0) {
+    return Math.round((scanResult.security_checks_passed / scanResult.security_checks_total) * 100);
+  }
+
+  return null;
+}
+
+function getSecurityProtocol(scanResult: DBScanRow): string {
+  if (scanResult.security_results?.protocol) {
+    return scanResult.security_results.protocol;
+  }
+  if (scanResult.security_results?.https_enabled === true) {
+    return 'HTTPS';
+  }
+  if (scanResult.security_results?.https_enabled === false) {
+    return 'HTTP';
+  }
+  return 'N/A';
+}
+
+function getSecurityIssueText(issue: SecurityIssue): string {
+  return issue.message || issue.description || 'No details provided';
+}
+
+function getAccessibilityIssueText(issue: AccessibilityIssue): string {
+  return issue.message || 'No details provided';
+}
+
 function generateHTMLReport(scanResult: DBScanRow): string {
   const scoreColor = (score: number) => {
     if (score >= 80) return '#10b981';
@@ -180,6 +223,13 @@ function generateHTMLReport(scanResult: DBScanRow): string {
   const aiRecommendations = Array.isArray(scanResult.ai_recommendations) && scanResult.ai_recommendations.length > 0
     ? scanResult.ai_recommendations
     : aiData.recommendations;
+  const securityScore = getSecurityScore(scanResult);
+  const securityProtocol = getSecurityProtocol(scanResult);
+  const securityStatus = scanResult.security_results?.status;
+  const performanceStatus = scanResult.performance_results?.status;
+  const accessibilityStatus = scanResult.accessibility_results?.status;
+  const apiStatus = scanResult.api_results?.status;
+  const e2eStatus = scanResult.e2e_results?.status;
 
   console.log("AI Data Debug:", {
     aiSummaryExists: !!scanResult.ai_summary,
@@ -276,15 +326,16 @@ function generateHTMLReport(scanResult: DBScanRow): string {
 
   <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
     <h2 style="color: #111827; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">🔒 Security Analysis</h2>
-    <p><strong>Score:</strong> <span style="color: ${scoreColor(scanResult.security_results?.score || 0)};">${scanResult.security_results?.score || 'N/A'}/100</span></p>
-    <p><strong>Protocol:</strong> ${scanResult.security_results?.protocol || 'N/A'}</p>
+    <p><strong>Status:</strong> ${securityStatus || 'N/A'}</p>
+    <p><strong>Score:</strong> <span style="color: ${scoreColor(securityScore || 0)};">${securityScore ?? 'N/A'}/100</span></p>
+    <p><strong>Protocol:</strong> ${securityProtocol}</p>
     
     ${scanResult.security_results?.issues && scanResult.security_results.issues.length > 0 ? `
       <h3 style="color: #374151; font-size: 16px; margin-top: 20px;">Issues Found:</h3>
       <ul style="list-style: none; padding: 0;">
         ${scanResult.security_results.issues.map((issue: SecurityIssue) => `
           <li style="padding: 8px 0; border-bottom: 1px solid #f3f4f6;">
-            ${severityBadge(issue.severity || 'low')} ${issue.message}
+            ${severityBadge(issue.severity || 'low')} ${getSecurityIssueText(issue)}
           </li>
         `).join('')}
       </ul>
@@ -293,6 +344,7 @@ function generateHTMLReport(scanResult: DBScanRow): string {
 
   <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
     <h2 style="color: #111827; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">⚡ Detailed Performance Analysis</h2>
+    <p><strong>Status:</strong> ${performanceStatus || 'N/A'}</p>
     <p><strong>Score:</strong> <span style="color: ${scoreColor(scanResult.performance_results?.score || 0)};">${scanResult.performance_results?.score || 'N/A'}/100</span></p>
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
       <div style="background: #f9fafb; padding: 15px; border-radius: 8px;">
@@ -305,7 +357,7 @@ function generateHTMLReport(scanResult: DBScanRow): string {
       </div>
       <div style="background: #f9fafb; padding: 15px; border-radius: 8px;">
         <div style="color: #6b7280; font-size: 14px;">Images</div>
-        <div style="font-size: 24px; font-weight: bold; color: #111827;">${scanResult.performance_results?.images_count || 0}</div>
+        <div style="font-size: 24px; font-weight: bold; color: #111827;">${scanResult.performance_results?.images_count ?? scanResult.performance_results?.image_count ?? 0}</div>
       </div>
       <div style="background: #f9fafb; padding: 15px; border-radius: 8px;">
         <div style="color: #6b7280; font-size: 14px;">Scripts</div>
@@ -316,6 +368,7 @@ function generateHTMLReport(scanResult: DBScanRow): string {
 
   <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
     <h2 style="color: #111827; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">👁️ Accessibility Issues</h2>
+    <p><strong>Status:</strong> ${accessibilityStatus || 'N/A'}</p>
     <p><strong>Score:</strong> <span style="color: ${scoreColor(scanResult.accessibility_results?.score || 0)};">${scanResult.accessibility_results?.score || 'N/A'}/100</span></p>
     <p><strong>Total Issues:</strong> ${scanResult.accessibility_results?.total_issues || 0}</p>
     
@@ -323,7 +376,7 @@ function generateHTMLReport(scanResult: DBScanRow): string {
       <ul style="list-style: none; padding: 0;">
         ${scanResult.accessibility_results.issues.map((issue: AccessibilityIssue) => `
           <li style="padding: 8px 0; border-bottom: 1px solid #f3f4f6;">
-            ${severityBadge(issue.severity || 'low')} ${issue.message}
+            ${severityBadge(issue.severity || 'low')} ${getAccessibilityIssueText(issue)}
           </li>
         `).join('')}
       </ul>
@@ -332,6 +385,8 @@ function generateHTMLReport(scanResult: DBScanRow): string {
 
   <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
     <h2 style="color: #111827; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">🔌 API Analysis</h2>
+    <p><strong>Status:</strong> ${apiStatus || 'N/A'}</p>
+    ${scanResult.api_results?.error ? `<p><strong>Error:</strong> ${scanResult.api_results.error}</p>` : ''}
     <p><strong>Endpoints Detected:</strong> ${scanResult.api_results?.endpoints_detected || 0}</p>
 
     ${scanResult.api_results?.endpoints && scanResult.api_results.endpoints.length > 0 ? `
@@ -348,6 +403,8 @@ function generateHTMLReport(scanResult: DBScanRow): string {
 
   <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
     <h2 style="color: #111827; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">🤖 End-to-End Testing Insights</h2>
+    <p><strong>Status:</strong> ${e2eStatus || 'N/A'}</p>
+    ${scanResult.e2e_results?.error ? `<p><strong>Error:</strong> ${scanResult.e2e_results.error}</p>` : ''}
     <p><strong>Buttons Found:</strong> ${scanResult.e2e_results?.buttons_found || 0}</p>
     <p><strong>Links Found:</strong> ${scanResult.e2e_results?.links_found || 0}</p>
     <p><strong>Forms Found:</strong> ${scanResult.e2e_results?.forms_found || 0}</p>
@@ -397,6 +454,8 @@ function generateHTMLReport(scanResult: DBScanRow): string {
 
 function generateTextReport(scanResult: DBScanRow): string {
   const sr = scanResult;
+  const securityScore = getSecurityScore(scanResult);
+  const securityProtocol = getSecurityProtocol(scanResult);
   return `
 =================================================
 ROBO-LAB WEB SCANNER - COMPREHENSIVE REPORT
@@ -420,14 +479,15 @@ ${sr.top_issues!.indexOf(issue) + 1}. [${(issue.severity || '').toUpperCase()}] 
 SECURITY ANALYSIS
 -------------------------------------------------
 
-Score: ${sr.security_results?.score || 'N/A'}/100
-Protocol: ${sr.security_results?.protocol || 'N/A'}
+Status: ${sr.security_results?.status || 'N/A'}
+Score: ${securityScore ?? 'N/A'}/100
+Protocol: ${securityProtocol}
 
 Security Headers:
 ${sr.security_results?.security_headers ? Object.entries(sr.security_results.security_headers).map(([key, value]) => `  - ${key}: ${value || 'Missing'}`).join('\n') : '  N/A'}
 
 Issues Found:
-${sr.security_results?.issues ? sr.security_results.issues.map((issue: SecurityIssue, idx: number) => `  ${idx + 1}. [${issue.severity}] ${issue.message}`).join('\n') : '  None'}
+${sr.security_results?.issues ? sr.security_results.issues.map((issue: SecurityIssue, idx: number) => `  ${idx + 1}. [${issue.severity}] ${getSecurityIssueText(issue)}`).join('\n') : '  None'}
 
 Recommendations:
   - Implement HSTS with long max-age
@@ -439,10 +499,11 @@ Recommendations:
 PERFORMANCE ANALYSIS
 -------------------------------------------------
 
+Status: ${sr.performance_results?.status || 'N/A'}
 Score: ${sr.performance_results?.score || 'N/A'}/100
 Load Time: ${sr.performance_results?.load_time_ms || 'N/A'}ms
 Page Size: ${sr.performance_results?.page_size_kb || 'N/A'}KB
-Images: ${sr.performance_results?.images_count || 0}
+Images: ${sr.performance_results?.images_count ?? sr.performance_results?.image_count ?? 0}
 Scripts: ${sr.performance_results?.scripts_count || 0}
 Stylesheets: ${sr.performance_results?.stylesheets_count || 0}
 
@@ -457,11 +518,12 @@ Recommendations:
 ACCESSIBILITY ANALYSIS
 -------------------------------------------------
 
+Status: ${sr.accessibility_results?.status || 'N/A'}
 Score: ${sr.accessibility_results?.score || 'N/A'}/100
 Total Issues: ${sr.accessibility_results?.total_issues || 0}
 
 Issues Found:
-${sr.accessibility_results?.issues ? sr.accessibility_results.issues.map((issue: AccessibilityIssue, idx: number) => `  ${idx + 1}. [${issue.severity}] ${issue.message}`).join('\n') : '  None'}
+${sr.accessibility_results?.issues ? sr.accessibility_results.issues.map((issue: AccessibilityIssue, idx: number) => `  ${idx + 1}. [${issue.severity}] ${getAccessibilityIssueText(issue)}`).join('\n') : '  None'}
 
 Recommendations:
   - Add alt text to all images
@@ -474,6 +536,8 @@ Recommendations:
 API ANALYSIS
 -------------------------------------------------
 
+Status: ${sr.api_results?.status || 'N/A'}
+${sr.api_results?.error ? `Error: ${sr.api_results.error}` : ''}
 Endpoints Detected: ${sr.api_results?.endpoints_detected || 0}
 
 ${sr.api_results?.endpoints ? sr.api_results.endpoints.map((ep: APIEndpoint, idx: number) => `  ${idx + 1}. ${ep.method} ${ep.path}`).join('\n') : '  None detected'}
@@ -488,6 +552,8 @@ Recommendations:
 E2E TESTING INSIGHTS
 -------------------------------------------------
 
+Status: ${sr.e2e_results?.status || 'N/A'}
+${sr.e2e_results?.error ? `Error: ${sr.e2e_results.error}` : ''}
 Buttons Found: ${sr.e2e_results?.buttons_found || 0}
 Links Found: ${sr.e2e_results?.links_found || 0}
 Forms Found: ${sr.e2e_results?.forms_found || 0}

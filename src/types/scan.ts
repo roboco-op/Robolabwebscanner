@@ -26,6 +26,7 @@ export interface PerformanceResults {
   diagnostics?: Array<{ title: string; description?: string }>;
   source?: string;
   status?: 'pending' | 'completed' | 'failed';
+  error?: string;
 }
 
 export interface SecurityIssue {
@@ -44,6 +45,7 @@ export interface SecurityResults {
   score?: number;
   security_headers?: Record<string, string>;
   status?: 'pending' | 'completed' | 'failed';
+  error?: string;
 }
 
 export interface AccessibilityIssue {
@@ -59,6 +61,7 @@ export interface AccessibilityResults {
   score?: number;
   wcag_level?: string;
   status?: 'pending' | 'completed' | 'failed';
+  error?: string;
 }
 
 export interface E2EResults {
@@ -67,6 +70,7 @@ export interface E2EResults {
   forms_found?: number;
   primary_actions?: string[];
   status?: 'pending' | 'completed' | 'failed';
+  error?: string;
 }
 
 export interface APIEndpoint {
@@ -79,6 +83,7 @@ export interface APIResults {
   endpoints_detected?: number;
   endpoints?: APIEndpoint[];
   status?: 'pending' | 'completed' | 'failed';
+  error?: string;
 }
 
 export interface TechStackResult {

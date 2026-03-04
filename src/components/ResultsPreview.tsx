@@ -52,6 +52,8 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
   };
 
   const isScanning = result.scan_status === 'pending' || result.scan_status === 'processing';
+  const apiFailed = !isScanning && result.api_results?.status === 'failed';
+  const e2eFailed = !isScanning && result.e2e_results?.status === 'failed';
   const previewImageUrl = !isScanning && !previewImageFailed ? result.og_image : null;
   const previewImageSource = result.preview_image_source && result.preview_image_source !== 'none'
     ? result.preview_image_source
@@ -192,6 +194,27 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
           </>
         )}
       </div>
+
+      {(apiFailed || e2eFailed) && (
+        <div className="mb-8 space-y-3">
+          {apiFailed && (
+            <div className="rounded-lg border border-cyan-200 bg-cyan-50 p-4">
+              <p className="text-sm font-semibold text-cyan-900">API Analysis incomplete</p>
+              <p className="text-sm text-cyan-800 mt-1">
+                {result.api_results?.error || 'The passive endpoint analysis could not complete for this scan.'}
+              </p>
+            </div>
+          )}
+          {e2eFailed && (
+            <div className="rounded-lg border border-purple-200 bg-purple-50 p-4">
+              <p className="text-sm font-semibold text-purple-900">E2E analysis incomplete</p>
+              <p className="text-sm text-purple-800 mt-1">
+                {result.e2e_results?.error || 'The interaction analysis could not complete for this scan.'}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {result.e2e_results && (
         <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg p-6 mb-8 border border-purple-200">

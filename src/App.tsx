@@ -12,6 +12,22 @@ function App() {
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [showConsultationModal, setShowConsultationModal] = useState(false);
+  const scannerFunctionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/web-scanner`;
+
+  const triggerScanWorker = async () => {
+    try {
+      await fetch(scannerFunctionUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ mode: 'process-next' }),
+      });
+    } catch (error) {
+      console.warn('Worker trigger failed:', error);
+    }
+  };
 
   useEffect(() => {
     if (!scanResult || scanResult.scan_status === 'completed' || scanResult.scan_status === 'failed') {
@@ -21,6 +37,8 @@ function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
     const pollInterval = setInterval(async () => {
+      await triggerScanWorker();
+
       const { data } = await supabase
         .from('scan_results')
         .select('*')
@@ -59,7 +77,7 @@ function App() {
       setScanResult(data as ScanResult);
 
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/web-scanner`,
+        scannerFunctionUrl,
         {
           method: 'POST',
           headers: {
@@ -74,6 +92,8 @@ function App() {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || 'Scan initiation failed');
       }
+
+      await triggerScanWorker();
     } catch (error) {
       console.error('Scan error:', error);
       setScanning(false);

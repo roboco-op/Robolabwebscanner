@@ -54,6 +54,14 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
   const isScanning = result.scan_status === 'pending' || result.scan_status === 'processing';
   const apiFailed = !isScanning && result.api_results?.status === 'failed';
   const e2eFailed = !isScanning && result.e2e_results?.status === 'failed';
+  const securityIssuesCount = result.security_results?.issues?.length ?? 0;
+  const securityScore = result.security_checks_total
+    ? Math.round(((result.security_checks_passed ?? 0) / result.security_checks_total) * 100)
+    : 0;
+  const seoMissingTags = result.seo_results?.missing_meta_tags ?? [];
+  const sitemapDetected = result.seo_results?.sitemap_detected;
+  const structuredDataMissing = result.seo_results?.structured_data_missing;
+  const scanDurationSeconds = result.scan_duration_ms ? Math.max(1, Math.round(result.scan_duration_ms / 1000)) : undefined;
   const previewImageUrl = !isScanning && !previewImageFailed ? result.og_image : null;
   const previewImageSource = result.preview_image_source && result.preview_image_source !== 'none'
     ? result.preview_image_source
@@ -143,7 +151,7 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
                 </span>
               </div>
               <p className="text-sm font-medium text-gray-600">Security</p>
-              <p className="text-xs text-gray-500 mt-1">Security checks passed</p>
+              <p className="text-xs text-gray-500 mt-1">Basic security scan completed</p>
             </div>
 
             <div className="bg-gray-50 rounded-lg shadow p-6 border-l-4 border-green-500">
@@ -216,6 +224,21 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
         </div>
       )}
 
+      <div className="bg-red-50 rounded-lg p-6 mb-8 border border-red-200">
+        <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+          <Shield className="w-5 h-5 text-red-600" />
+          Security
+        </h3>
+        <div className="text-sm text-gray-700 space-y-2">
+          <p>
+            <span className="font-medium">Basic security scan completed:</span> {securityIssuesCount === 0 ? 'No security issues detected.' : `${securityIssuesCount} security issues detected.`}
+          </p>
+          <p>
+            <span className="font-medium">Security score:</span> {securityScore}/100
+          </p>
+        </div>
+      </div>
+
       {result.performance_results?.core_web_vitals && result.performance_results?.source === 'google-pagespeed' && (
         <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg p-6 mb-8 border border-green-200">
           <div className="flex items-center gap-2 mb-4">
@@ -223,12 +246,16 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
               <Mail className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-gray-900">Performance Metrics</h3>
+              <h3 className="text-lg font-bold text-gray-900">Performance Result</h3>
               <p className="text-xs text-gray-600">Core Web Vitals and detailed performance analysis</p>
             </div>
           </div>
           <div className="bg-white rounded-lg p-4 border border-green-200 shadow-sm">
-            <p className="text-sm text-gray-700">Check your email for detailed performance metrics including load times, stability scores, and optimization recommendations.</p>
+            <div className="text-sm text-gray-700 space-y-1">
+              <p>LCP: {result.performance_results?.core_web_vitals?.lcp ?? 'N/A'} ms</p>
+              <p>CLS: {result.performance_results?.core_web_vitals?.cls ?? 'N/A'}</p>
+              <p>TTFB: N/A (not collected by current scanner)</p>
+            </div>
           </div>
         </div>
       )}
@@ -237,7 +264,7 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
         <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-6 mb-8 border border-blue-200">
           <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
             <BarChart3 className="w-5 h-5 text-blue-600" />
-            Google Lighthouse Scores
+            Overall Accessibility Result
           </h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-white rounded-lg p-4 border border-blue-200 shadow-sm text-center">
@@ -269,6 +296,46 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
               <div className="text-sm font-medium text-gray-600 mt-2">SEO</div>
             </div>
           </div>
+          <div className="mt-4 bg-white rounded-lg p-4 border border-blue-200 shadow-sm text-sm text-gray-700 space-y-1">
+            <p><span className="font-medium">SEO score explanation:</span> {result.seo_score ?? result.performance_results?.lighthouse_scores?.seo ?? 0}/100</p>
+            <p>Missing meta tags: {seoMissingTags.length > 0 ? seoMissingTags.join(', ') : 'None detected'}</p>
+            <p>Sitemap detected: {sitemapDetected === undefined ? 'Unknown' : sitemapDetected ? 'Yes' : 'No'}</p>
+            <p>Missing structured data: {structuredDataMissing === undefined ? 'Unknown' : structuredDataMissing ? 'Yes' : 'No'}</p>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-cyan-50 rounded-lg p-6 mb-8 border border-cyan-200">
+        <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+          <BarChart3 className="w-5 h-5 text-cyan-600" />
+          API Analysis Result
+        </h3>
+        <div className="text-sm text-gray-700 space-y-2">
+          <p><span className="font-medium">Status:</span> {result.api_results?.status || 'N/A'}</p>
+          <p><span className="font-medium">Endpoints detected:</span> {result.api_results?.endpoints_detected ?? 0}</p>
+          {(result.api_results?.endpoints_detected ?? 0) === 0 && (
+            <p className="text-cyan-800">No endpoints were detected from passive page-source analysis. This usually means APIs are bundled or dynamically loaded beyond static HTML parsing.</p>
+          )}
+        </div>
+      </div>
+
+      {result.e2e_results && (
+        <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg p-6 mb-8 border border-purple-200">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg flex items-center justify-center shadow">
+              <Mail className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">E2E Testing Result</h3>
+              <p className="text-xs text-gray-600">Detailed testing results sent to your email</p>
+            </div>
+          </div>
+          <div className="bg-purple-50 rounded-lg p-4 border border-purple-200 shadow-sm text-sm text-gray-700 space-y-1">
+            <p>Buttons: {result.e2e_results.buttons_found ?? 0}, Links: {result.e2e_results.links_found ?? 0}, Forms: {result.e2e_results.forms_found ?? 0}</p>
+            {(result.e2e_results.buttons_found ?? 0) + (result.e2e_results.links_found ?? 0) + (result.e2e_results.forms_found ?? 0) === 0 && (
+              <p className="text-purple-800">No interactive elements were detected on the scanned page. The page may be static or rendered dynamically after load.</p>
+            )}
+          </div>
         </div>
       )}
 
@@ -289,21 +356,19 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
           </div>
         )}
 
-        {result.exposed_endpoints && result.exposed_endpoints.length > 0 && (
-          <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
-            <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <Lock className="w-5 h-5 text-orange-600" />
-              Exposed API Endpoints
-            </h3>
-            <div className="space-y-2">
-              {result.exposed_endpoints.slice(0, 5).map((endpoint, idx) => (
-                <div key={idx} className="px-3 py-2 bg-orange-50 text-orange-800 rounded text-sm font-mono border border-orange-200 break-all">
-                  {endpoint}
-                </div>
-              ))}
-            </div>
+        <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
+          <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <Lock className="w-5 h-5 text-orange-600" />
+            Scan Metadata
+          </h3>
+          <div className="text-sm text-gray-700 space-y-1">
+            <p>Scan date: {new Date(result.created_at).toLocaleString()}</p>
+            <p>Scan duration: {scanDurationSeconds ? `${scanDurationSeconds}s` : 'N/A'}</p>
+            <p>Pages scanned: {result.pages_scanned ?? 1}</p>
+            <p>Scan depth: {result.scan_depth ?? 1}</p>
+            <p>Environment: {result.scan_environment || (result.performance_results?.source === 'google-pagespeed' ? 'Mobile' : 'Desktop')}</p>
           </div>
-        )}
+        </div>
       </div>
 
         <div>
@@ -368,23 +433,6 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
           </div>
         </div>
       </div>
-
-      {result.e2e_results && (
-        <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg p-6 mb-8 border border-purple-200">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg flex items-center justify-center shadow">
-              <Mail className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-gray-900">Interactive Elements Analysis</h3>
-              <p className="text-xs text-gray-600">Detailed testing results sent to your email</p>
-            </div>
-          </div>
-          <div className="bg-purple-50 rounded-lg p-4 border border-purple-200 shadow-sm">
-            <p className="text-sm text-gray-700">For a comprehensive analysis of interactive elements on your site, check your email for the full detailed report.</p>
-          </div>
-        </div>
-      )}
 
       {!submitted ? (
         <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg shadow-lg p-8 border border-blue-200">

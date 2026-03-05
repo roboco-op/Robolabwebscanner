@@ -57,6 +57,14 @@ type TopIssue = {
   description: string;
 };
 
+type SEOResults = {
+  missing_meta_tags?: string[];
+  sitemap_detected?: boolean;
+  structured_data_missing?: boolean;
+  status?: 'pending' | 'completed' | 'failed';
+  error?: string;
+};
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
@@ -267,6 +275,7 @@ async function processNextQueuedJob(supabase: ReturnType<typeof createClient>) {
 
 async function processScan(scanId: string, url: string, supabase: ReturnType<typeof createClient>): Promise<{ success: boolean; error?: string }> {
   try {
+    const scanStartMs = Date.now();
     await supabase
       .from("scan_results")
       .update({ scan_status: "processing" })
@@ -319,9 +328,10 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
 
     console.log(`Overall score: ${overallScore}, top issues: ${topIssues.length}`);
 
-    // Extract preview image
+    // Extract preview image and SEO indicators
     let ogImage: string | null = null;
     let previewImageSource: PreviewImageSource = "none";
+    let seoResults: SEOResults = { status: 'completed' };
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
@@ -339,6 +349,7 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
         const previewImage = extractPreviewImage(html, url);
         ogImage = previewImage.url;
         previewImageSource = previewImage.source;
+        seoResults = extractSEOResults(html, url);
         if (ogImage) {
           console.log(`Preview image found (${previewImageSource}): ${ogImage}`);
         } else {
@@ -347,6 +358,7 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
       }
     } catch (ogError) {
       console.log("Failed to extract preview image:", ogError);
+      seoResults = { status: 'failed', error: 'Unable to compute SEO indicators' };
     }
 
     let aiSummary = null;
@@ -406,6 +418,8 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
     const securityChecksPassed = Math.max(0, 7 - securityIssues.length);
     const technologies = scanResults.techStack?.detected?.map((t) => t.name) || [];
     const exposedEndpoints = scanResults.api?.endpoints?.map((e) => e.path) || [];
+    const scanDurationMs = Date.now() - scanStartMs;
+    const scanEnvironment = scanResults.performance?.source === 'google-pagespeed' ? 'mobile' : 'desktop';
 
     console.log("Skipping PDF generation (disabled)");
 
@@ -425,6 +439,7 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
         ai_recommendations: aiRecommendations,
         performance_score: performanceScore,
         seo_score: seoScore,
+        seo_results: seoResults,
         accessibility_issue_count: accessibilityIssueCount,
         security_checks_passed: securityChecksPassed,
         security_checks_total: 7,
@@ -432,6 +447,10 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
         exposed_endpoints: exposedEndpoints,
         og_image: ogImage,
         preview_image_source: previewImageSource,
+        scan_duration_ms: scanDurationMs,
+        pages_scanned: 1,
+        scan_depth: 1,
+        scan_environment: scanEnvironment,
       })
       .eq("id", scanId);
 
@@ -456,6 +475,28 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
 
     return { success: false, error: error instanceof Error ? error.message : "Scan processing failed" };
   }
+}
+
+function extractSEOResults(html: string, url: string): SEOResults {
+  const missingMetaTags: string[] = [];
+
+  const hasTitle = /<title[^>]*>[^<]+<\/title>/i.test(html);
+  const hasMetaDescription = /<meta[^>]+name=["']description["'][^>]*content=["'][^"']+["'][^>]*>/i.test(html);
+  const hasCanonical = /<link[^>]+rel=["']canonical["'][^>]*>/i.test(html);
+
+  if (!hasTitle) missingMetaTags.push('title');
+  if (!hasMetaDescription) missingMetaTags.push('meta description');
+  if (!hasCanonical) missingMetaTags.push('canonical');
+
+  const structuredDataPresent = /<script[^>]+type=["']application\/ld\+json["'][^>]*>/i.test(html);
+  const sitemapDetected = /sitemap/i.test(html) || /\/sitemap\.xml/i.test(html);
+
+  return {
+    missing_meta_tags: missingMetaTags,
+    sitemap_detected: sitemapDetected,
+    structured_data_missing: !structuredDataPresent,
+    status: 'completed',
+  };
 }
 
 type PipelineSection<T> = T & { status?: 'pending' | 'completed' | 'failed'; error?: string };

@@ -86,6 +86,14 @@ export interface APIResults {
   error?: string;
 }
 
+export interface SEOResults {
+  missing_meta_tags?: string[];
+  sitemap_detected?: boolean;
+  structured_data_missing?: boolean;
+  status?: 'pending' | 'completed' | 'failed';
+  error?: string;
+}
+
 export interface TechStackResult {
   detected?: Array<{ name: string; confidence?: string; version?: string; category?: string }>;
   total_detected?: number;
@@ -111,12 +119,16 @@ export interface ScanResult {
   security_results?: SecurityResults;
   performance_results?: PerformanceResults;
   accessibility_results?: AccessibilityResults;
-  seo_results?: Record<string, unknown>;
+  seo_results?: SEOResults;
   tech_stack?: TechStackResult;
   top_issues: TopIssue[];
   og_image?: string | null;
   preview_image_source?: 'og' | 'twitter' | 'jsonld' | 'first_img' | 'none' | null;
   wcag_results?: WCAGResults;
+  scan_duration_ms?: number;
+  pages_scanned?: number;
+  scan_depth?: number;
+  scan_environment?: 'mobile' | 'desktop' | string;
   created_at: string;
   expires_at: string;
 }

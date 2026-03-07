@@ -197,6 +197,15 @@ To run full end-to-end verification (create scan -> complete -> targeted yslow -
 npm run verify:scan-yslow
 ```
 
+Pass custom verification arguments:
+
+```bash
+npm run verify:scan-yslow -- https://your-site.example
+npm run verify:scan-yslow -- https://your-site.example 45 5
+```
+
+Argument order is: `targetUrl pollAttempts pollIntervalSeconds`.
+
 ## Troubleshooting
 
 **"Failed to start scan"**

@@ -8,6 +8,14 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+if ($PollAttempts -lt 1) {
+  throw "PollAttempts must be at least 1"
+}
+
+if ($PollIntervalSeconds -lt 1) {
+  throw "PollIntervalSeconds must be at least 1"
+}
+
 function Read-EnvFileValue {
   param(
     [string[]]$Paths,
@@ -61,7 +69,10 @@ $insertHeaders = @{}
 $baseHeaders.Keys | ForEach-Object { $insertHeaders[$_] = $baseHeaders[$_] }
 $insertHeaders["Prefer"] = "return=representation"
 
-Write-Host "Starting verify-scan-yslow for target: $TargetUrl"
+Write-Host "Starting verify-scan-yslow"
+Write-Host "  TargetUrl: $TargetUrl"
+Write-Host "  PollAttempts: $PollAttempts"
+Write-Host "  PollIntervalSeconds: $PollIntervalSeconds"
 
 $insertBody = @{ target_url = $TargetUrl; scan_status = "pending" } | ConvertTo-Json -Compress
 $insert = Invoke-RestMethod -Method Post -Uri "$SupabaseUrl/rest/v1/scan_results" -Headers $insertHeaders -Body $insertBody

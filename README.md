@@ -191,6 +191,12 @@ To process pending YSlow rows after scans complete:
 npm run yslow:once
 ```
 
+To run full end-to-end verification (create scan -> complete -> targeted yslow -> final row print):
+
+```bash
+npm run verify:scan-yslow
+```
+
 ## Troubleshooting
 
 **"Failed to start scan"**

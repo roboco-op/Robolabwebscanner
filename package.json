@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "test:regenerate": "node test-regenerate.js",
     "yslow:worker": "node --env-file=.env.local workers/yslow-worker.mjs",
-    "yslow:once": "node --env-file=.env.local workers/yslow-worker.mjs --once"
+    "yslow:once": "node --env-file=.env.local workers/yslow-worker.mjs --once",
+    "verify:scan-yslow": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-scan-yslow.ps1"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",

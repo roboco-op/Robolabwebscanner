@@ -54,11 +54,25 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    const yslowResponse = await fetch(workerUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ mode: "process-yslow" }),
+    });
+
+    let yslowResult: Record<string, unknown> | null = null;
+    if (yslowResponse.ok) {
+      yslowResult = await yslowResponse.json();
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
         runs: processed.length,
         processed,
+        yslow: yslowResult,
       }),
       {
         status: 200,

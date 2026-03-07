@@ -354,6 +354,10 @@ function generateHTMLReport(scanResult: DBScanRow): string {
         <td style="padding: 10px 0; color: #111827; text-transform: capitalize;">${getDetectedEnvironment(scanResult)}</td>
       </tr>
       <tr>
+        <td style="padding: 10px 0; font-weight: 600; color: #6b7280;">YSlow Score:</td>
+        <td style="padding: 10px 0; color: #111827;">${scanResult.yslow_score ?? 'N/A'}</td>
+      </tr>
+      <tr>
         <td style="padding: 10px 0; font-weight: 600; color: #6b7280;">Overall Score:</td>
         <td style="padding: 10px 0;">
           <span style="font-size: 36px; font-weight: bold; color: ${scoreColor(scanResult.overall_score || 0)};">${scanResult.overall_score || 0}</span>
@@ -443,6 +447,28 @@ function generateHTMLReport(scanResult: DBScanRow): string {
       </div>
     </div>
   </div>
+
+  <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+    <h2 style="color: #111827; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">🚀 YSlow Compatibility Result</h2>
+    <p><strong>Score:</strong> ${scanResult.yslow_score ?? 'N/A'}/100</p>
+    <p><strong>Grade:</strong> ${((scanResult.yslow_results || {}) as Record<string, unknown>).grade || 'N/A'}</p>
+    <p><strong>Total requests:</strong> ${(((scanResult.yslow_results || {}) as Record<string, unknown>).metrics as Record<string, unknown> | undefined)?.total_requests ?? 'N/A'}</p>
+    <p><strong>Average cache TTL (seconds):</strong> ${(((scanResult.yslow_results || {}) as Record<string, unknown>).metrics as Record<string, unknown> | undefined)?.avg_asset_cache_ttl_seconds ?? 'N/A'}</p>
+  </div>
+
+  ${(Array.isArray(scanResult.crawl_results) && scanResult.crawl_results.length > 0) ? `
+  <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+    <h2 style="color: #111827; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">🕸️ Crawled Pages</h2>
+    <p><strong>Total pages crawled:</strong> ${scanResult.pages_scanned || (scanResult.crawl_results as Array<Record<string, unknown>>).length}</p>
+    <ul style="list-style: none; padding: 0; color: #374151;">
+      ${(scanResult.crawl_results as Array<Record<string, unknown>>).slice(0, 20).map((page) => `
+        <li style="padding: 8px 0; border-bottom: 1px solid #f3f4f6;">
+          • ${String(page.url || '')} (depth ${String(page.depth ?? 0)}, status ${String(page.status ?? 'N/A')}, load ${String(page.load_time_ms ?? 'N/A')}ms)
+        </li>
+      `).join('')}
+    </ul>
+  </div>
+  ` : ''}
 
   <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
     <h2 style="color: #111827; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">👁️ Overall Accessibility Result</h2>
@@ -558,6 +584,7 @@ Scan Duration: ${sr.scan_duration_ms ? `${Math.max(1, Math.round(sr.scan_duratio
 Pages Scanned: ${sr.pages_scanned || 1}
 Scan Depth: ${sr.scan_depth || 1}
 Environment: ${getDetectedEnvironment(sr)}
+YSlow Score: ${sr.yslow_score ?? 'N/A'}/100
 Overall Score: ${sr.overall_score}/100
 Overall Explanation: ${explanations.overall}
 
@@ -670,6 +697,25 @@ ${totalInteractiveElements === 0 ? 'Why 0: No interactive elements were detected
 
 Primary Actions:
 ${sr.e2e_results?.primary_actions ? sr.e2e_results.primary_actions.map((action: string, idx: number) => `  ${idx + 1}. ${action}`).join('\n') : '  None'}
+
+-------------------------------------------------
+YSLOW COMPATIBILITY RESULT
+-------------------------------------------------
+
+Score: ${sr.yslow_score ?? 'N/A'}/100
+Grade: ${((sr.yslow_results || {}) as Record<string, unknown>).grade || 'N/A'}
+Total Requests: ${(((sr.yslow_results || {}) as Record<string, unknown>).metrics as Record<string, unknown> | undefined)?.total_requests ?? 'N/A'}
+Average Cache TTL (seconds): ${(((sr.yslow_results || {}) as Record<string, unknown>).metrics as Record<string, unknown> | undefined)?.avg_asset_cache_ttl_seconds ?? 'N/A'}
+YSlow Explanation: ${explanations.yslow}
+
+-------------------------------------------------
+CRAWLED PAGES
+-------------------------------------------------
+
+Total Crawled Pages: ${sr.pages_scanned || (Array.isArray(sr.crawl_results) ? sr.crawl_results.length : 0)}
+${Array.isArray(sr.crawl_results) && sr.crawl_results.length > 0
+  ? (sr.crawl_results as Array<Record<string, unknown>>).slice(0, 30).map((page, idx) => `  ${idx + 1}. ${String(page.url || '')} (depth ${String(page.depth ?? 0)}, status ${String(page.status ?? 'N/A')}, load ${String(page.load_time_ms ?? 'N/A')}ms)`).join('\n')
+  : '  None'}
 
 -------------------------------------------------
 TECHNOLOGY STACK

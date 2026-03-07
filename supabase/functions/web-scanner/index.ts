@@ -76,6 +76,38 @@ type AnalysisExplanations = {
   yslow?: string;
 };
 
+type CrawlPageSummary = {
+  url: string;
+  depth: number;
+  status: number;
+  load_time_ms: number;
+  html_bytes?: number;
+  links_discovered?: number;
+  title?: string;
+  buttons_found?: number;
+  links_found?: number;
+  forms_found?: number;
+};
+
+type CrawlAggregate = {
+  apiEndpoints: Array<{ method: string; path: string; status: number }>;
+  buttons: number;
+  links: number;
+  forms: number;
+  maxDepthReached: number;
+  avgLoadTimeMs: number;
+  pagesScanned: number;
+};
+
+type CrawlResult = {
+  pages: CrawlPageSummary[];
+  aggregate: CrawlAggregate;
+  firstPageHtml: string | null;
+};
+
+const MAX_CRAWL_PAGES = Math.min(100, Math.max(1, Number(Deno.env.get("SCAN_MAX_PAGES") ?? "25")));
+const MAX_CRAWL_DEPTH = Math.min(5, Math.max(1, Number(Deno.env.get("SCAN_MAX_DEPTH") ?? "3")));
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
@@ -85,7 +117,7 @@ const corsHeaders = {
 interface ScanRequest {
   scanId?: string;
   url?: string;
-  mode?: "enqueue" | "process-next";
+  mode?: "enqueue" | "process-next" | "process-yslow";
 }
 
 type ScanJobStatus = "queued" | "retry_wait" | "processing" | "completed" | "dead_letter";
@@ -121,6 +153,17 @@ Deno.serve(async (req: Request) => {
       const workerResult = await processNextQueuedJob(supabase);
       return new Response(
         JSON.stringify({ success: true, ...workerResult }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    if (body.mode === "process-yslow") {
+      const yslowResult = await processYSlowSyncBatch(supabase);
+      return new Response(
+        JSON.stringify({ success: true, ...yslowResult }),
         {
           status: 200,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -284,6 +327,126 @@ async function processNextQueuedJob(supabase: ReturnType<typeof createClient>) {
   };
 }
 
+function getYSlowGrade(score: number): string {
+  if (score >= 90) return "A";
+  if (score >= 80) return "B";
+  if (score >= 70) return "C";
+  if (score >= 60) return "D";
+  if (score >= 50) return "E";
+  return "F";
+}
+
+function buildYSlowFromStoredResults(scanRow: { performance_results?: Record<string, unknown> | null; crawl_results?: unknown[] | null }) {
+  const performance = (scanRow.performance_results || {}) as Record<string, unknown>;
+  const crawl = Array.isArray(scanRow.crawl_results) ? scanRow.crawl_results : [];
+
+  const scripts = Number(performance.scripts_count || 0);
+  const stylesheets = Number(performance.stylesheets_count || 0);
+  const images = Number(performance.images_count || performance.image_count || 0);
+  const totalRequests = Math.max(1, scripts + stylesheets + images + 1);
+  const compressed = Boolean(performance.compression_enabled);
+  const cached = Boolean(performance.caching_enabled);
+  const redirects = 0;
+
+  const requestsScore = Math.max(0, Math.min(100, Math.round(100 - Math.max(0, totalRequests - 30) * 2.2)));
+  const compressionScore = compressed ? 100 : 40;
+  const cachingScore = cached ? 90 : 45;
+  const minificationScore = scripts > 0 ? 65 : 80;
+  const redirectsScore = redirects > 0 ? 70 : 100;
+  const cookiesScore = 85;
+
+  const overallScore = Math.round(
+    (requestsScore * 0.3) +
+    (compressionScore * 0.15) +
+    (cachingScore * 0.2) +
+    (minificationScore * 0.15) +
+    (redirectsScore * 0.1) +
+    (cookiesScore * 0.1)
+  );
+
+  const avgLoad = crawl.length > 0
+    ? Math.round(crawl.reduce((sum, page) => sum + Number((page as Record<string, unknown>)?.load_time_ms || 0), 0) / crawl.length)
+    : Number(performance.load_time_ms || 0);
+
+  return {
+    overall_score: overallScore,
+    grade: getYSlowGrade(overallScore),
+    rule_scores: {
+      requests: requestsScore,
+      compression: compressionScore,
+      caching: cachingScore,
+      minification: minificationScore,
+      redirects: redirectsScore,
+      cookies: cookiesScore,
+    },
+    metrics: {
+      total_requests: totalRequests,
+      scripts,
+      stylesheets,
+      images,
+      redirects,
+      compressed_main_doc: compressed,
+      avg_asset_cache_ttl_seconds: cached ? 86400 : 0,
+      minified_asset_ratio: scripts > 0 ? 0.65 : 1,
+      cookie_bytes: 0,
+      avg_load_time_ms: avgLoad,
+    },
+    recommendations: [
+      requestsScore < 75 ? "Reduce request count by bundling assets and removing unused dependencies." : "Keep request counts stable as pages evolve.",
+      compressionScore < 90 ? "Enable gzip or brotli compression for HTML/CSS/JS responses." : "Maintain compression on all text-based responses.",
+      cachingScore < 80 ? "Apply long-lived cache headers to fingerprinted static assets." : "Preserve strong cache directives for static assets.",
+      "Regularly audit render-blocking resources and oversized bundles.",
+    ],
+    checked_at: new Date().toISOString(),
+  };
+}
+
+async function processYSlowSyncBatch(supabase: ReturnType<typeof createClient>) {
+  const { data: pendingRows, error: fetchError } = await supabase
+    .from("scan_results")
+    .select("id, target_url, performance_results, crawl_results, analysis_explanations")
+    .eq("scan_status", "completed")
+    .is("yslow_score", null)
+    .order("created_at", { ascending: true })
+    .limit(3);
+
+  if (fetchError) {
+    console.error("YSlow fetch error:", fetchError);
+    return { processed: 0, error: "fetch_failed" };
+  }
+
+  if (!pendingRows || pendingRows.length === 0) {
+    return { processed: 0, reason: "no_rows" };
+  }
+
+  let processed = 0;
+
+  for (const row of pendingRows) {
+    const yslow = buildYSlowFromStoredResults(row as { performance_results?: Record<string, unknown> | null; crawl_results?: unknown[] | null });
+    const existingExplanations = (row as Record<string, unknown>).analysis_explanations as Record<string, unknown> | null;
+
+    const { error: updateError } = await supabase
+      .from("scan_results")
+      .update({
+        yslow_score: yslow.overall_score,
+        yslow_results: yslow,
+        analysis_explanations: {
+          ...(existingExplanations || {}),
+          yslow: `YSlow-compatible analysis score is ${yslow.overall_score}/100 (grade ${yslow.grade}). Main pressure points are request volume (${yslow.metrics.total_requests}), caching (${yslow.rule_scores.caching}/100), and compression (${yslow.rule_scores.compression}/100).`,
+        },
+      })
+      .eq("id", (row as Record<string, unknown>).id as string);
+
+    if (!updateError) {
+      processed += 1;
+    } else {
+      console.error("YSlow update failed", updateError);
+    }
+  }
+
+  return { processed };
+}
+
 async function processScan(scanId: string, url: string, supabase: ReturnType<typeof createClient>): Promise<{ success: boolean; error?: string }> {
   try {
     const scanStartMs = Date.now();
@@ -330,9 +493,38 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
       });
     }
 
-    console.log("Performing scans...");
-    const scanResults = await performScan(url);
-    console.log("Scans completed");
+    console.log(`Crawling site (max pages: ${MAX_CRAWL_PAGES}, max depth: ${MAX_CRAWL_DEPTH})...`);
+    const crawlResult = await crawlInternalPages(url, MAX_CRAWL_PAGES, MAX_CRAWL_DEPTH);
+    const primaryScanUrl = crawlResult.pages[0]?.url || url;
+
+    console.log(`Performing detailed scans on primary page: ${primaryScanUrl}`);
+    const scanResults = await performScan(primaryScanUrl);
+
+    if (crawlResult.aggregate.apiEndpoints.length > 0) {
+      scanResults.api = {
+        endpoints_detected: crawlResult.aggregate.apiEndpoints.length,
+        endpoints: crawlResult.aggregate.apiEndpoints.slice(0, 20),
+        status: "completed",
+      };
+    }
+
+    scanResults.e2e = {
+      buttons_found: crawlResult.aggregate.buttons,
+      links_found: crawlResult.aggregate.links,
+      forms_found: crawlResult.aggregate.forms,
+      primary_actions: scanResults.e2e?.primary_actions || [],
+      status: scanResults.e2e?.status || "completed",
+      error: scanResults.e2e?.error,
+    };
+
+    if (scanResults.performance?.status === "completed") {
+      scanResults.performance.load_time_ms =
+        crawlResult.aggregate.avgLoadTimeMs > 0
+          ? crawlResult.aggregate.avgLoadTimeMs
+          : (scanResults.performance.load_time_ms || 0);
+    }
+
+    console.log(`Scans completed across ${crawlResult.aggregate.pagesScanned} crawled pages`);
 
     const topIssues = extractTopIssues(scanResults);
     const overallScore = calculateOverallScore(scanResults);
@@ -344,23 +536,29 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
     let previewImageSource: PreviewImageSource = "none";
     let seoResults: SEOResults = { status: 'completed' };
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          "User-Agent": "Mozilla/5.0 (compatible; RobolabScanner/1.0)",
-        },
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-      
-      if (response.ok) {
-        const html = await response.text();
-        const previewImage = extractPreviewImage(html, url);
+      let html: string | null = crawlResult.firstPageHtml;
+
+      if (!html) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        const response = await fetch(primaryScanUrl, {
+          method: "GET",
+          headers: {
+            "User-Agent": "Mozilla/5.0 (compatible; RobolabScanner/1.0)",
+          },
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        if (response.ok) {
+          html = await response.text();
+        }
+      }
+
+      if (html) {
+        const previewImage = extractPreviewImage(html, primaryScanUrl);
         ogImage = previewImage.url;
         previewImageSource = previewImage.source;
-        seoResults = extractSEOResults(html, url);
+        seoResults = extractSEOResults(html, primaryScanUrl);
         if (ogImage) {
           console.log(`Preview image found (${previewImageSource}): ${ogImage}`);
         } else {
@@ -427,9 +625,12 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
         exposed_endpoints: exposedEndpoints,
         og_image: ogImage,
         preview_image_source: previewImageSource,
+        crawl_results: crawlResult.pages,
+        yslow_score: null,
+        yslow_results: null,
         scan_duration_ms: scanDurationMs,
-        pages_scanned: 1,
-        scan_depth: 1,
+        pages_scanned: crawlResult.aggregate.pagesScanned,
+        scan_depth: crawlResult.aggregate.maxDepthReached + 1,
         scan_environment: scanEnvironment,
       })
       .eq("id", scanId);
@@ -455,6 +656,242 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
 
     return { success: false, error: error instanceof Error ? error.message : "Scan processing failed" };
   }
+}
+
+function normalizeCrawlUrl(rawUrl: string): string {
+  try {
+    const url = new URL(rawUrl);
+    url.hash = "";
+    const pathname = url.pathname.replace(/\/+$/, "") || "/";
+    return `${url.origin}${pathname}${url.search}`;
+  } catch {
+    return rawUrl;
+  }
+}
+
+function shouldSkipCrawlAsset(url: URL): boolean {
+  return /\.(?:pdf|zip|jpg|jpeg|png|gif|svg|webp|ico|mp4|mp3|avi|mov|xml|json|txt|csv|woff2?|ttf|eot)(?:$|\?)/i.test(url.pathname);
+}
+
+function extractTitle(html: string): string | undefined {
+  const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  if (!match?.[1]) return undefined;
+  return match[1].replace(/\s+/g, " ").trim().slice(0, 200);
+}
+
+function extractInternalLinks(html: string, pageUrl: string, rootOrigin: string): string[] {
+  const links: string[] = [];
+  const seen = new Set<string>();
+
+  const matches = [...html.matchAll(/<a[^>]*href=["']([^"']+)["'][^>]*>/gi)];
+  for (const match of matches) {
+    const href = (match[1] || "").trim();
+    if (!href || href.startsWith("#") || href.startsWith("mailto:") || href.startsWith("tel:") || href.startsWith("javascript:")) {
+      continue;
+    }
+
+    try {
+      const resolved = new URL(href, pageUrl);
+      if (resolved.origin !== rootOrigin) continue;
+      if (shouldSkipCrawlAsset(resolved)) continue;
+
+      const normalized = normalizeCrawlUrl(resolved.toString());
+      if (!seen.has(normalized)) {
+        seen.add(normalized);
+        links.push(normalized);
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return links;
+}
+
+function extractApiEndpointsFromHtml(html: string, pageUrl: string): Array<{ method: string; path: string; status: number }> {
+  const endpoints: Array<{ method: string; path: string; status: number }> = [];
+  const endpointSet = new Set<string>();
+  const baseUrl = new URL(pageUrl);
+
+  const addEndpoint = (rawPath: string, method = "GET") => {
+    const trimmed = rawPath?.trim();
+    if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("javascript:") || trimmed.startsWith("mailto:")) {
+      return;
+    }
+
+    try {
+      const resolved = new URL(trimmed, baseUrl);
+      if (resolved.origin !== baseUrl.origin) return;
+      const normalizedPath = `${resolved.pathname}${resolved.search}`;
+      if (!normalizedPath.startsWith("/")) return;
+
+      const key = `${method.toUpperCase()} ${normalizedPath}`;
+      if (endpointSet.has(key)) return;
+
+      endpointSet.add(key);
+      endpoints.push({ method: method.toUpperCase(), path: normalizedPath, status: 0 });
+    } catch {
+      return;
+    }
+  };
+
+  const fetchRegex = /fetch\s*\(\s*["']([^"']+)["']/gi;
+  let fetchMatch;
+  while ((fetchMatch = fetchRegex.exec(html)) !== null) {
+    addEndpoint(fetchMatch[1], "GET");
+  }
+
+  const axiosMethodRegex = /axios\.(get|post|put|patch|delete)\s*\(\s*["']([^"']+)["']/gi;
+  let axiosMethodMatch;
+  while ((axiosMethodMatch = axiosMethodRegex.exec(html)) !== null) {
+    addEndpoint(axiosMethodMatch[2], axiosMethodMatch[1]);
+  }
+
+  const xhrRegex = /\.open\s*\(\s*["'](GET|POST|PUT|PATCH|DELETE)["']\s*,\s*["']([^"']+)["']/gi;
+  let xhrMatch;
+  while ((xhrMatch = xhrRegex.exec(html)) !== null) {
+    addEndpoint(xhrMatch[2], xhrMatch[1]);
+  }
+
+  const formActionRegex = /<form[^>]*action=["']([^"']+)["'][^>]*>/gi;
+  let formMatch;
+  while ((formMatch = formActionRegex.exec(html)) !== null) {
+    addEndpoint(formMatch[1], "POST");
+  }
+
+  return endpoints;
+}
+
+async function crawlInternalPages(startUrl: string, maxPages: number, maxDepth: number): Promise<CrawlResult> {
+  const root = new URL(startUrl);
+  const rootOrigin = root.origin;
+  const queue: Array<{ url: string; depth: number }> = [{ url: normalizeCrawlUrl(startUrl), depth: 0 }];
+  const visited = new Set<string>();
+  const pages: CrawlPageSummary[] = [];
+  const allApiEndpoints = new Map<string, { method: string; path: string; status: number }>();
+
+  let totalLoadTime = 0;
+  let firstPageHtml: string | null = null;
+
+  while (queue.length > 0 && pages.length < maxPages) {
+    const next = queue.shift();
+    if (!next) break;
+
+    const normalized = normalizeCrawlUrl(next.url);
+    if (visited.has(normalized)) continue;
+    visited.add(normalized);
+
+    const startedAt = performance.now();
+    let response: Response | null = null;
+    let html = "";
+    let links: string[] = [];
+    let status = 0;
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+      response = await fetch(normalized, {
+        method: "GET",
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; RobolabScanner/1.0)",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+      status = response.status;
+
+      const contentType = (response.headers.get("content-type") || "").toLowerCase();
+      if (!response.ok || !contentType.includes("text/html")) {
+        const loadTime = Math.max(1, Math.round(performance.now() - startedAt));
+        pages.push({
+          url: normalized,
+          depth: next.depth,
+          status,
+          load_time_ms: loadTime,
+          html_bytes: 0,
+          links_discovered: 0,
+          buttons_found: 0,
+          links_found: 0,
+          forms_found: 0,
+        });
+        totalLoadTime += loadTime;
+        continue;
+      }
+
+      html = await response.text();
+      if (!firstPageHtml) {
+        firstPageHtml = html;
+      }
+
+      links = extractInternalLinks(html, normalized, rootOrigin);
+      const apiEndpoints = extractApiEndpointsFromHtml(html, normalized);
+      for (const endpoint of apiEndpoints) {
+        allApiEndpoints.set(`${endpoint.method} ${endpoint.path}`, endpoint);
+      }
+
+      const buttonsFound = (html.match(/<button[^>]*>|<input[^>]*type=["'](?:button|submit)["'][^>]*>/gi) || []).length;
+      const linksFound = (html.match(/<a[^>]*href=["'][^"']+["'][^>]*>/gi) || []).length;
+      const formsFound = (html.match(/<form[^>]*>/gi) || []).length;
+      const loadTime = Math.max(1, Math.round(performance.now() - startedAt));
+
+      pages.push({
+        url: normalized,
+        depth: next.depth,
+        status,
+        load_time_ms: loadTime,
+        html_bytes: html.length,
+        links_discovered: links.length,
+        title: extractTitle(html),
+        buttons_found: buttonsFound,
+        links_found: linksFound,
+        forms_found: formsFound,
+      });
+
+      totalLoadTime += loadTime;
+
+      if (next.depth < maxDepth) {
+        for (const link of links) {
+          if (!visited.has(link) && queue.length + pages.length < maxPages * 2) {
+            queue.push({ url: link, depth: next.depth + 1 });
+          }
+        }
+      }
+    } catch (error) {
+      console.warn(`Crawl failed for ${normalized}:`, error);
+      const loadTime = Math.max(1, Math.round(performance.now() - startedAt));
+      pages.push({
+        url: normalized,
+        depth: next.depth,
+        status: status || 0,
+        load_time_ms: loadTime,
+        html_bytes: html.length || 0,
+        links_discovered: links.length || 0,
+        buttons_found: 0,
+        links_found: 0,
+        forms_found: 0,
+      });
+      totalLoadTime += loadTime;
+    }
+  }
+
+  const aggregate: CrawlAggregate = {
+    apiEndpoints: Array.from(allApiEndpoints.values()),
+    buttons: pages.reduce((sum, page) => sum + (page.buttons_found || 0), 0),
+    links: pages.reduce((sum, page) => sum + (page.links_found || 0), 0),
+    forms: pages.reduce((sum, page) => sum + (page.forms_found || 0), 0),
+    maxDepthReached: pages.reduce((maxDepthReached, page) => Math.max(maxDepthReached, page.depth), 0),
+    avgLoadTimeMs: pages.length > 0 ? Math.round(totalLoadTime / pages.length) : 0,
+    pagesScanned: pages.length,
+  };
+
+  return {
+    pages,
+    aggregate,
+    firstPageHtml,
+  };
 }
 
 function extractSEOResults(html: string, url: string): SEOResults {

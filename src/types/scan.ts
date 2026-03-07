@@ -105,6 +105,45 @@ export interface AnalysisExplanations {
   yslow?: string;
 }
 
+export interface CrawlPageSummary {
+  url: string;
+  depth: number;
+  status: number;
+  load_time_ms: number;
+  html_bytes?: number;
+  links_discovered?: number;
+  title?: string;
+  buttons_found?: number;
+  links_found?: number;
+  forms_found?: number;
+}
+
+export interface YSlowResults {
+  overall_score?: number;
+  grade?: string;
+  rule_scores?: {
+    requests?: number;
+    compression?: number;
+    caching?: number;
+    minification?: number;
+    redirects?: number;
+    cookies?: number;
+  };
+  metrics?: {
+    total_requests?: number;
+    scripts?: number;
+    stylesheets?: number;
+    images?: number;
+    redirects?: number;
+    compressed_main_doc?: boolean;
+    avg_asset_cache_ttl_seconds?: number;
+    minified_asset_ratio?: number;
+    cookie_bytes?: number;
+  };
+  recommendations?: string[];
+  checked_at?: string;
+}
+
 export interface TechStackResult {
   detected?: Array<{ name: string; confidence?: string; version?: string; category?: string }>;
   total_detected?: number;
@@ -131,6 +170,9 @@ export interface ScanResult {
   performance_results?: PerformanceResults;
   accessibility_results?: AccessibilityResults;
   seo_results?: SEOResults;
+  yslow_score?: number;
+  yslow_results?: YSlowResults;
+  crawl_results?: CrawlPageSummary[];
   analysis_explanations?: AnalysisExplanations;
   tech_stack?: TechStackResult;
   top_issues: TopIssue[];

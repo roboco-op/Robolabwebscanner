@@ -9,6 +9,8 @@ A comprehensive automated web application analysis tool that scans websites for 
 - **Accessibility Audit**: WCAG compliance checks including alt text, labels, and semantic HTML
 - **API Detection**: Identifies API endpoints and provides hygiene recommendations
 - **E2E Insights**: Detects buttons, links, forms, and primary user actions
+- **Full-Site Crawling**: Crawls reachable internal pages with depth/page limits
+- **YSlow-Compatible Scoring**: Computes request/caching/compression/minification style score and grade
 - **Tech Stack Detection**: Identifies frameworks and technologies used
 - **Rate Limiting**: 5 scans per domain per hour to prevent abuse
 - **Email Reports**: Beautiful HTML and text reports delivered via email
@@ -60,6 +62,27 @@ Visit `http://localhost:5173` to use the scanner.
 npm run build
 ```
 
+### 6. Optional: Run Node YSlow Worker
+
+The app now supports a Node worker that enriches completed scans with YSlow-compatible metrics and grade.
+
+Required environment variables:
+
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+
+Run one batch:
+
+```bash
+npm run yslow:once
+```
+
+Run continuously:
+
+```bash
+npm run yslow:worker
+```
+
 ## How It Works
 
 1. **User Input**: User enters a website URL
@@ -89,12 +112,20 @@ npm run build
 
 ### web-scanner
 Performs the actual website analysis:
+- Internal page crawl (reachable same-origin links)
 - E2E element detection
 - Security header checks
 - Performance metrics
 - Accessibility validation
 - API endpoint detection
 - Technology stack fingerprinting
+- Persists crawl summaries and yslow-ready metadata
+
+### scan-worker
+Scheduled worker orchestration:
+- Processes durable scan queue batches
+- Handles retry/dead-letter lifecycle
+- Triggers YSlow-compatible sync enrichment
 
 ### send-report
 Generates and delivers email reports:
@@ -137,6 +168,12 @@ Try scanning these URLs:
 - `https://example.com` - Basic test site
 - `https://github.com` - Modern web app
 - `https://wikipedia.org` - Content-heavy site
+
+To process pending YSlow rows after scans complete:
+
+```bash
+npm run yslow:once
+```
 
 ## Troubleshooting
 

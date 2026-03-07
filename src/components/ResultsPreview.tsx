@@ -142,9 +142,10 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
         {isScanning ? (
           <>
+            <MetricSkeletonLoader />
             <MetricSkeletonLoader />
             <MetricSkeletonLoader />
             <MetricSkeletonLoader />
@@ -208,6 +209,17 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
               </div>
               <p className="text-sm font-medium text-gray-600">E2E Testing</p>
               <p className="text-xs text-gray-500 mt-1">Interactive elements</p>
+            </div>
+
+            <div className="bg-gray-50 rounded-lg shadow p-6 border-l-4 border-indigo-500">
+              <div className="flex items-center justify-between mb-2">
+                <BarChart3 className="w-8 h-8 text-indigo-600" />
+                <span className="text-3xl font-bold text-gray-900">
+                  {result.yslow_score ?? (isScanning ? '—' : 0)}
+                </span>
+              </div>
+              <p className="text-sm font-medium text-gray-600">YSlow</p>
+              <p className="text-xs text-gray-500 mt-1">Compatibility score</p>
             </div>
           </>
         )}
@@ -356,6 +368,20 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
         </div>
       )}
 
+      <div className="bg-indigo-50 rounded-lg p-6 mb-8 border border-indigo-200">
+        <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+          <BarChart3 className="w-5 h-5 text-indigo-600" />
+          YSlow Compatibility Result
+        </h3>
+        <div className="text-sm text-gray-700 space-y-2">
+          <p>{analysisExplanations.yslow || 'YSlow-style explanation is not available yet for this scan.'}</p>
+          <p><span className="font-medium">YSlow score:</span> {result.yslow_score ?? 0}/100</p>
+          <p><span className="font-medium">Grade:</span> {result.yslow_results?.grade || 'N/A'}</p>
+          <p><span className="font-medium">Total requests:</span> {result.yslow_results?.metrics?.total_requests ?? 'N/A'}</p>
+          <p><span className="font-medium">Avg asset cache TTL (seconds):</span> {result.yslow_results?.metrics?.avg_asset_cache_ttl_seconds ?? 'N/A'}</p>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         {result.technologies && result.technologies.length > 0 && (
           <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
@@ -387,6 +413,20 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
           </div>
         </div>
       </div>
+
+      {(result.crawl_results && result.crawl_results.length > 0) && (
+        <div className="bg-gray-50 rounded-lg p-6 mb-8 border border-gray-200">
+          <h3 className="text-lg font-bold text-gray-900 mb-4">Crawled Pages</h3>
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {result.crawl_results.slice(0, 20).map((page, index) => (
+              <div key={`${page.url}-${index}`} className="bg-white rounded border border-gray-200 p-3 text-sm text-gray-700">
+                <p className="font-medium break-all">{page.url}</p>
+                <p className="text-xs text-gray-500 mt-1">Depth: {page.depth} • Status: {page.status} • Load: {page.load_time_ms}ms • Links discovered: {page.links_discovered ?? 0}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
         <div>
           <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">

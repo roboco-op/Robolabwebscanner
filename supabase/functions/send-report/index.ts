@@ -214,6 +214,42 @@ function getSEOResults(scanResult: DBScanRow): { missing_meta_tags: string[]; si
   };
 }
 
+function getAnalysisExplanations(scanResult: DBScanRow): Required<NonNullable<DBScanRow['analysis_explanations']>> {
+  const raw = (scanResult.analysis_explanations || {}) as Record<string, unknown>;
+  const securityIssues = scanResult.security_results?.issues?.length || 0;
+  const apiDetected = scanResult.api_results?.endpoints_detected || 0;
+  const e2eTotal = (scanResult.e2e_results?.buttons_found || 0) + (scanResult.e2e_results?.links_found || 0) + (scanResult.e2e_results?.forms_found || 0);
+  const seo = getSEOResults(scanResult);
+
+  const fallback = {
+    overall: `Overall analysis completed with score ${scanResult.overall_score || 0}/100 for ${scanResult.target_url}.`,
+    security: securityIssues === 0
+      ? 'Security analysis completed and no immediate header-level security issues were detected.'
+      : `Security analysis completed and ${securityIssues} issue(s) were detected that should be reviewed.`,
+    performance: `Performance analysis completed with score ${scanResult.performance_results?.score || 0}/100 and load time ${scanResult.performance_results?.load_time_ms || 0}ms.`,
+    accessibility: `Accessibility analysis completed with score ${scanResult.accessibility_results?.score || 0}/100 and ${scanResult.accessibility_results?.total_issues || 0} issue(s).`,
+    api: apiDetected === 0
+      ? 'API analysis completed but no endpoints were detected through passive page-source inspection.'
+      : `API analysis completed with ${apiDetected} detected endpoint(s).`,
+    e2e: e2eTotal === 0
+      ? 'E2E analysis completed but no interactive elements were detected on the scanned page snapshot.'
+      : `E2E analysis completed with ${scanResult.e2e_results?.buttons_found || 0} button(s), ${scanResult.e2e_results?.links_found || 0} link(s), and ${scanResult.e2e_results?.forms_found || 0} form(s).`,
+    seo: `SEO analysis completed with score ${scanResult.seo_score ?? scanResult.performance_results?.lighthouse_scores?.seo ?? 0}/100. Missing meta tags: ${seo.missing_meta_tags.length > 0 ? seo.missing_meta_tags.join(', ') : 'none'}. Sitemap: ${seo.sitemap_detected === undefined ? 'unknown' : seo.sitemap_detected ? 'yes' : 'no'}. Structured data missing: ${seo.structured_data_missing === undefined ? 'unknown' : seo.structured_data_missing ? 'yes' : 'no'}.`,
+    yslow: typeof raw.yslow === 'string' && raw.yslow.trim().length > 0 ? raw.yslow : 'YSlow-style optimization notes are not separately available in this scan.',
+  };
+
+  return {
+    overall: typeof raw.overall === 'string' && raw.overall.trim().length > 0 ? raw.overall : fallback.overall,
+    security: typeof raw.security === 'string' && raw.security.trim().length > 0 ? raw.security : fallback.security,
+    performance: typeof raw.performance === 'string' && raw.performance.trim().length > 0 ? raw.performance : fallback.performance,
+    accessibility: typeof raw.accessibility === 'string' && raw.accessibility.trim().length > 0 ? raw.accessibility : fallback.accessibility,
+    api: typeof raw.api === 'string' && raw.api.trim().length > 0 ? raw.api : fallback.api,
+    e2e: typeof raw.e2e === 'string' && raw.e2e.trim().length > 0 ? raw.e2e : fallback.e2e,
+    seo: typeof raw.seo === 'string' && raw.seo.trim().length > 0 ? raw.seo : fallback.seo,
+    yslow: fallback.yslow,
+  };
+}
+
 function generateHTMLReport(scanResult: DBScanRow): string {
   const scoreColor = (score: number) => {
     if (score >= 80) return '#10b981';
@@ -245,6 +281,7 @@ function generateHTMLReport(scanResult: DBScanRow): string {
   const apiStatus = scanResult.api_results?.status;
   const e2eStatus = scanResult.e2e_results?.status;
   const seoResults = getSEOResults(scanResult);
+  const explanations = getAnalysisExplanations(scanResult);
   const totalInteractiveElements = (scanResult.e2e_results?.buttons_found || 0) + (scanResult.e2e_results?.links_found || 0) + (scanResult.e2e_results?.forms_found || 0);
   const apiEndpointsDetected = scanResult.api_results?.endpoints_detected || 0;
 
@@ -324,6 +361,7 @@ function generateHTMLReport(scanResult: DBScanRow): string {
         </td>
       </tr>
     </table>
+    <p style="margin-top: 14px; color: #374151;"><strong>Overall explanation:</strong> ${explanations.overall}</p>
   </div>
 
   ${aiSummary ? `
@@ -359,6 +397,7 @@ function generateHTMLReport(scanResult: DBScanRow): string {
 
   <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
     <h2 style="color: #111827; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">🔒 Security Analysis</h2>
+    <p><strong>Explanation:</strong> ${explanations.security}</p>
     <p><strong>Status:</strong> Basic security scan completed (${securityStatus || 'N/A'})</p>
     <p><strong>Security issues detected:</strong> ${scanResult.security_results?.issues?.length || 0}</p>
     <p><strong>Score:</strong> <span style="color: ${scoreColor(securityScore || 0)};">${securityScore ?? 'N/A'}/100</span></p>
@@ -378,6 +417,7 @@ function generateHTMLReport(scanResult: DBScanRow): string {
 
   <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
     <h2 style="color: #111827; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">⚡ Performance Result</h2>
+    <p><strong>Explanation:</strong> ${explanations.performance}</p>
     <p><strong>Status:</strong> ${performanceStatus || 'N/A'}</p>
     <p><strong>Score:</strong> <span style="color: ${scoreColor(scanResult.performance_results?.score || 0)};">${scanResult.performance_results?.score || 'N/A'}/100</span></p>
     <p><strong>LCP:</strong> ${scanResult.performance_results?.core_web_vitals?.lcp ?? 'N/A'} ms</p>
@@ -405,6 +445,8 @@ function generateHTMLReport(scanResult: DBScanRow): string {
 
   <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
     <h2 style="color: #111827; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">👁️ Overall Accessibility Result</h2>
+    <p><strong>Accessibility explanation:</strong> ${explanations.accessibility}</p>
+    <p><strong>SEO explanation:</strong> ${explanations.seo}</p>
     <p><strong>Status:</strong> ${accessibilityStatus || 'N/A'}</p>
     <p><strong>Score:</strong> <span style="color: ${scoreColor(scanResult.accessibility_results?.score || 0)};">${scanResult.accessibility_results?.score || 'N/A'}/100</span></p>
     <p><strong>Total Issues:</strong> ${scanResult.accessibility_results?.total_issues || 0}</p>
@@ -426,6 +468,7 @@ function generateHTMLReport(scanResult: DBScanRow): string {
 
   <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
     <h2 style="color: #111827; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">🔌 API Analysis Result</h2>
+    <p><strong>Explanation:</strong> ${explanations.api}</p>
     <p><strong>Status:</strong> ${apiStatus || 'N/A'}</p>
     ${scanResult.api_results?.error ? `<p><strong>Error:</strong> ${scanResult.api_results.error}</p>` : ''}
     <p><strong>Endpoints Detected:</strong> ${apiEndpointsDetected}</p>
@@ -445,6 +488,7 @@ function generateHTMLReport(scanResult: DBScanRow): string {
 
   <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
     <h2 style="color: #111827; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">🤖 E2E Testing Result</h2>
+    <p><strong>Explanation:</strong> ${explanations.e2e}</p>
     <p><strong>Status:</strong> ${e2eStatus || 'N/A'}</p>
     ${scanResult.e2e_results?.error ? `<p><strong>Error:</strong> ${scanResult.e2e_results.error}</p>` : ''}
     <p><strong>Buttons Found:</strong> ${scanResult.e2e_results?.buttons_found || 0}</p>
@@ -500,6 +544,7 @@ function generateTextReport(scanResult: DBScanRow): string {
   const securityScore = getSecurityScore(scanResult);
   const securityProtocol = getSecurityProtocol(scanResult);
   const seoResults = getSEOResults(scanResult);
+  const explanations = getAnalysisExplanations(scanResult);
   const totalInteractiveElements = (sr.e2e_results?.buttons_found || 0) + (sr.e2e_results?.links_found || 0) + (sr.e2e_results?.forms_found || 0);
   return `
 =================================================
@@ -513,6 +558,7 @@ Pages Scanned: ${sr.pages_scanned || 1}
 Scan Depth: ${sr.scan_depth || 1}
 Environment: ${getDetectedEnvironment(sr)}
 Overall Score: ${sr.overall_score}/100
+Overall Explanation: ${explanations.overall}
 
 -------------------------------------------------
 EXECUTIVE SUMMARY
@@ -529,6 +575,7 @@ SECURITY ANALYSIS
 -------------------------------------------------
 
 Status: Basic security scan completed (${sr.security_results?.status || 'N/A'})
+Explanation: ${explanations.security}
 Security issues detected: ${sr.security_results?.issues?.length || 0}
 Score: ${securityScore ?? 'N/A'}/100
 Protocol: ${securityProtocol}
@@ -550,6 +597,7 @@ PERFORMANCE ANALYSIS
 -------------------------------------------------
 
 Status: ${sr.performance_results?.status || 'N/A'}
+Explanation: ${explanations.performance}
 Score: ${sr.performance_results?.score || 'N/A'}/100
 Load Time: ${sr.performance_results?.load_time_ms || 'N/A'}ms
 Page Size: ${sr.performance_results?.page_size_kb || 'N/A'}KB
@@ -569,6 +617,8 @@ ACCESSIBILITY ANALYSIS
 -------------------------------------------------
 
 Status: ${sr.accessibility_results?.status || 'N/A'}
+Accessibility Explanation: ${explanations.accessibility}
+SEO Explanation: ${explanations.seo}
 Score: ${sr.accessibility_results?.score || 'N/A'}/100
 Total Issues: ${sr.accessibility_results?.total_issues || 0}
 SEO explanation score: ${sr.seo_score ?? sr.performance_results?.lighthouse_scores?.seo ?? 0}/100
@@ -591,6 +641,7 @@ API ANALYSIS
 -------------------------------------------------
 
 Status: ${sr.api_results?.status || 'N/A'}
+Explanation: ${explanations.api}
 ${sr.api_results?.error ? `Error: ${sr.api_results.error}` : ''}
 Endpoints Detected: ${sr.api_results?.endpoints_detected || 0}
 ${(sr.api_results?.endpoints_detected || 0) === 0 ? 'Why 0: No endpoints were detected in passive page-source analysis (likely dynamic or bundled APIs).' : ''}
@@ -608,6 +659,7 @@ E2E TESTING INSIGHTS
 -------------------------------------------------
 
 Status: ${sr.e2e_results?.status || 'N/A'}
+Explanation: ${explanations.e2e}
 ${sr.e2e_results?.error ? `Error: ${sr.e2e_results.error}` : ''}
 Buttons Found: ${sr.e2e_results?.buttons_found || 0}
 Links Found: ${sr.e2e_results?.links_found || 0}

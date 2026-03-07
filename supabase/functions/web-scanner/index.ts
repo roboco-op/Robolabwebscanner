@@ -65,6 +65,17 @@ type SEOResults = {
   error?: string;
 };
 
+type AnalysisExplanations = {
+  overall?: string;
+  security?: string;
+  performance?: string;
+  accessibility?: string;
+  api?: string;
+  e2e?: string;
+  seo?: string;
+  yslow?: string;
+};
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
@@ -361,56 +372,6 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
       seoResults = { status: 'failed', error: 'Unable to compute SEO indicators' };
     }
 
-    let aiSummary = null;
-    let aiRecommendations = [];
-
-    try {
-      console.log("Generating AI analysis...");
-      const aiAnalysis = await generateAIAnalysis(url, scanResults, topIssues, overallScore);
-      aiSummary = aiAnalysis.summary;
-      aiRecommendations = aiAnalysis.recommendations;
-      console.log("AI analysis completed");
-    } catch (aiError) {
-      console.error("AI analysis failed:", aiError);
-    }
-
-    // Generate section-specific explanations
-    const generateSectionExplanation = (section: string, data: any): string => {
-      const explanations: Record<string, string> = {
-        performance: `Performance Score (${performanceScore}/100): This measures how efficiently your website loads and responds. ` +
-          `Load time: ${scanResults.performance?.load_time_ms}ms, Page size: ${scanResults.performance?.page_size_kb}KB. ` +
-          `${performanceScore >= 80 ? "Excellent performance - your site loads very quickly." : 
-            performanceScore >= 60 ? "Good performance - consider optimizing images and scripts." :
-            "Performance needs improvement - implement caching and code splitting."}`,
-        
-        security: `Security Score (${scanResults.security?.score || 0}/100): This evaluates your website's security posture. ` +
-          `Security checks passed: ${securityChecksPassed}/7. ` +
-          `${securityIssues.length > 0 ? `Found ${securityIssues.length} security issues that should be addressed immediately.` :
-            "No major security issues detected - good security practices implemented."}`,
-        
-        accessibility: `Accessibility Score (${scanResults.accessibility?.score || 0}/100): This measures how accessible your site is to all users, ` +
-          `including those with disabilities. Total issues found: ${accessibilityIssueCount}. ` +
-          `${accessibilityIssueCount > 10 ? "Multiple accessibility issues need urgent attention." :
-            accessibilityIssueCount > 0 ? "Some accessibility improvements recommended." :
-            "Good accessibility standards implemented."}`,
-        
-        seo: `SEO Score (${seoScore}/100): This evaluates search engine optimization factors like meta tags, headings, and mobile friendliness. ` +
-          `${seoScore >= 80 ? "Excellent SEO - your site should rank well in search results." :
-            seoScore >= 60 ? "Good SEO foundation - focus on content quality and backlinks." :
-            "SEO needs significant improvement - implement proper meta tags and structured data."}`,
-        
-        e2e: `End-to-End Testing: Detected ${scanResults.e2e?.buttons_found || 0} buttons, ${scanResults.e2e?.links_found || 0} links, ` +
-          `and ${scanResults.e2e?.forms_found || 0} forms. ` +
-          `${(scanResults.e2e?.buttons_found || 0) + (scanResults.e2e?.links_found || 0) + (scanResults.e2e?.forms_found || 0) > 50 ? 
-            "Your site has rich interactive content." : "Consider adding more interactive elements."}`,
-        
-        technologies: `Detected ${technologies.length} technologies including frameworks, libraries, and platforms. ` +
-          `${technologies.length > 0 ? `Primary stack: ${technologies.slice(0, 3).join(", ")}.` : ""} ` +
-          `Technology stack influences performance, security, and maintainability.`,
-      };
-      return explanations[section] || "No explanation available for this section.";
-    };
-
     const performanceScore = scanResults.performance?.score || scanResults.performance?.lighthouse_scores?.performance || 0;
     const seoScore = scanResults.performance?.lighthouse_scores?.seo || 0;
     const accessibilityIssueCount = scanResults.accessibility?.total_issues || 0;
@@ -420,6 +381,24 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
     const exposedEndpoints = scanResults.api?.endpoints?.map((e) => e.path) || [];
     const scanDurationMs = Date.now() - scanStartMs;
     const scanEnvironment = scanResults.performance?.source === 'google-pagespeed' ? 'mobile' : 'desktop';
+
+    let aiSummary = null;
+    let aiRecommendations = [];
+    let analysisExplanations: AnalysisExplanations = buildFallbackExplanations(url, scanResults, overallScore, seoScore, seoResults);
+
+    try {
+      console.log("Generating AI analysis...");
+      const aiAnalysis = await generateAIAnalysis(url, scanResults, topIssues, overallScore, analysisExplanations, seoResults);
+      aiSummary = aiAnalysis.summary;
+      aiRecommendations = aiAnalysis.recommendations;
+      analysisExplanations = {
+        ...analysisExplanations,
+        ...(aiAnalysis.explanations || {}),
+      };
+      console.log("AI analysis completed");
+    } catch (aiError) {
+      console.error("AI analysis failed:", aiError);
+    }
 
     console.log("Skipping PDF generation (disabled)");
 
@@ -440,6 +419,7 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
         performance_score: performanceScore,
         seo_score: seoScore,
         seo_results: seoResults,
+        analysis_explanations: analysisExplanations,
         accessibility_issue_count: accessibilityIssueCount,
         security_checks_passed: securityChecksPassed,
         security_checks_total: 7,
@@ -1495,13 +1475,49 @@ function calculateOverallScore(scanResults: { security?: SecurityResults; perfor
   return totalWeight > 0 ? Math.round(totalScore / totalWeight) : 0;
 }
 
-async function generateAIAnalysis(url: string, scanResults: Partial<{ security?: SecurityResults; accessibility?: AccessibilityResults; performance?: PerformanceResults }>, topIssues: TopIssue[], overallScore: number) {
+function buildFallbackExplanations(
+  url: string,
+  scanResults: Partial<{ security?: SecurityResults; accessibility?: AccessibilityResults; performance?: PerformanceResults; api?: APIResults; e2e?: E2EResults }>,
+  overallScore: number,
+  seoScore: number,
+  seoResults: SEOResults,
+): AnalysisExplanations {
+  const securityIssues = scanResults.security?.issues?.length || 0;
+  const securityChecksPassed = scanResults.security?.checks_passed || Math.max(0, 7 - securityIssues);
+  const securityChecksTotal = scanResults.security?.checks_performed || 7;
+  const securityScore = Math.round((securityChecksPassed / Math.max(1, securityChecksTotal)) * 100);
+  const apiCount = scanResults.api?.endpoints_detected || 0;
+  const e2eCount = (scanResults.e2e?.buttons_found || 0) + (scanResults.e2e?.links_found || 0) + (scanResults.e2e?.forms_found || 0);
+
+  return {
+    overall: `The scan for ${url} completed with an overall score of ${overallScore}/100. This summarizes security, performance, accessibility, API surface visibility, and interactive element coverage.` ,
+    security: `Basic security scan completed. ${securityIssues === 0 ? 'No immediate header-level security issues were detected.' : `${securityIssues} security issues were detected and should be remediated.`} Current security score is ${securityScore}/100 based on automated checks.`,
+    performance: `Performance analysis completed with score ${scanResults.performance?.score || 0}/100. Load time was ${scanResults.performance?.load_time_ms || 0}ms and core metrics should be reviewed alongside optimization opportunities for scripts, images, and caching.`,
+    accessibility: `Accessibility analysis completed with score ${scanResults.accessibility?.score || 0}/100 and ${scanResults.accessibility?.total_issues || 0} detected issues. Prioritize critical and serious findings first to improve usability and WCAG alignment.`,
+    api: apiCount === 0
+      ? 'API analysis completed but no endpoints were detected from passive page-source inspection. APIs may be bundled, runtime-generated, or protected behind authenticated app flows.'
+      : `API analysis completed with ${apiCount} discovered endpoint(s). Review endpoint exposure, method usage, and response hygiene as part of hardening.` ,
+    e2e: e2eCount === 0
+      ? 'E2E analysis completed but no interactive elements were detected on the scanned page snapshot. The page may be static or interactions may render after client-side runtime.'
+      : `E2E analysis completed with ${scanResults.e2e?.buttons_found || 0} buttons, ${scanResults.e2e?.links_found || 0} links, and ${scanResults.e2e?.forms_found || 0} forms detected.` ,
+    seo: `SEO indicator analysis completed with score ${seoScore}/100. Missing meta tags: ${(seoResults.missing_meta_tags || []).length > 0 ? seoResults.missing_meta_tags?.join(', ') : 'none'}. Sitemap detected: ${seoResults.sitemap_detected === undefined ? 'unknown' : seoResults.sitemap_detected ? 'yes' : 'no'}. Structured data missing: ${seoResults.structured_data_missing === undefined ? 'unknown' : seoResults.structured_data_missing ? 'yes' : 'no'}.`,
+  };
+}
+
+async function generateAIAnalysis(
+  url: string,
+  scanResults: Partial<{ security?: SecurityResults; accessibility?: AccessibilityResults; performance?: PerformanceResults; api?: APIResults; e2e?: E2EResults }>,
+  topIssues: TopIssue[],
+  overallScore: number,
+  fallbackExplanations: AnalysisExplanations,
+  seoResults: SEOResults,
+) {
   const groqKey = Deno.env.get("Console_Groq_AI_API_Key");
   console.log("Groq API Key configured:", !!groqKey);
 
   if (!groqKey) {
     console.log("Groq API key not configured, skipping AI analysis");
-    return { summary: null, recommendations: [] };
+    return { summary: null, recommendations: [], explanations: fallbackExplanations };
   }
 
   try {
@@ -1521,8 +1537,14 @@ You are a web security and performance expert. Provide concise, actionable techn
 Provide:
 1. A brief 2-3 sentence technical summary
 2. Top 3-5 actionable recommendations
+3. Section-by-section explanations for: overall, security, performance, accessibility, api, e2e, seo
 
-Format as JSON: {"summary": "...", "recommendations": ["...", "..."]}`;
+SEO indicator facts:
+- Missing meta tags: ${(seoResults.missing_meta_tags || []).join(', ') || 'none'}
+- Sitemap detected: ${seoResults.sitemap_detected === undefined ? 'unknown' : seoResults.sitemap_detected ? 'yes' : 'no'}
+- Structured data missing: ${seoResults.structured_data_missing === undefined ? 'unknown' : seoResults.structured_data_missing ? 'yes' : 'no'}
+
+Format as JSON: {"summary": "...", "recommendations": ["...", "..."], "explanations": {"overall": "...", "security": "...", "performance": "...", "accessibility": "...", "api": "...", "e2e": "...", "seo": "..."}}`;
 
     console.log("Sending request to Groq API...");
 
@@ -1541,7 +1563,7 @@ Format as JSON: {"summary": "...", "recommendations": ["...", "..."]}`;
           }
         ],
         temperature: 0.7,
-        max_tokens: 500,
+        max_tokens: 1200,
       }),
     });
 
@@ -1550,7 +1572,7 @@ Format as JSON: {"summary": "...", "recommendations": ["...", "..."]}`;
     if (!response.ok) {
       const txt = await response.text().catch(() => '');
       console.error("Groq API error:", response.status, txt);
-      return { summary: null, recommendations: [] };
+      return { summary: null, recommendations: [], explanations: fallbackExplanations };
     }
 
     const data = await response.json();
@@ -1559,7 +1581,7 @@ Format as JSON: {"summary": "...", "recommendations": ["...", "..."]}`;
 
     if (!content) {
       console.log("Groq API returned no content");
-      return { summary: null, recommendations: [] };
+      return { summary: null, recommendations: [], explanations: fallbackExplanations };
     }
 
     try {
@@ -1575,17 +1597,22 @@ Format as JSON: {"summary": "...", "recommendations": ["...", "..."]}`;
       console.log("Groq parsed AI analysis successfully");
       return {
         summary: parsed.summary || null,
-        recommendations: parsed.recommendations || []
+        recommendations: parsed.recommendations || [],
+        explanations: {
+          ...fallbackExplanations,
+          ...(parsed.explanations || {}),
+        }
       };
     } catch (parseError) {
       console.log("Groq content not valid JSON, using raw content:", parseError);
       return {
         summary: content,
-        recommendations: []
+        recommendations: [],
+        explanations: fallbackExplanations,
       };
     }
   } catch (error) {
     console.error("AI analysis error:", error);
-    return { summary: null, recommendations: [] };
+    return { summary: null, recommendations: [], explanations: fallbackExplanations };
   }
 }

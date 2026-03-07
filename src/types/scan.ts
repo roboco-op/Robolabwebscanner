@@ -94,6 +94,17 @@ export interface SEOResults {
   error?: string;
 }
 
+export interface AnalysisExplanations {
+  overall?: string;
+  security?: string;
+  performance?: string;
+  accessibility?: string;
+  api?: string;
+  e2e?: string;
+  seo?: string;
+  yslow?: string;
+}
+
 export interface TechStackResult {
   detected?: Array<{ name: string; confidence?: string; version?: string; category?: string }>;
   total_detected?: number;
@@ -120,6 +131,7 @@ export interface ScanResult {
   performance_results?: PerformanceResults;
   accessibility_results?: AccessibilityResults;
   seo_results?: SEOResults;
+  analysis_explanations?: AnalysisExplanations;
   tech_stack?: TechStackResult;
   top_issues: TopIssue[];
   og_image?: string | null;

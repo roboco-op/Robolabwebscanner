@@ -66,6 +66,7 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
   const previewImageSource = result.preview_image_source && result.preview_image_source !== 'none'
     ? result.preview_image_source
     : null;
+  const analysisExplanations = result.analysis_explanations || {};
 
   useEffect(() => {
     setPreviewImageFailed(false);
@@ -230,6 +231,7 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
           Security
         </h3>
         <div className="text-sm text-gray-700 space-y-2">
+          <p>{analysisExplanations.security || 'Security analysis explanation is not available yet for this scan.'}</p>
           <p>
             <span className="font-medium">Basic security scan completed:</span> {securityIssuesCount === 0 ? 'No security issues detected.' : `${securityIssuesCount} security issues detected.`}
           </p>
@@ -252,6 +254,7 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
           </div>
           <div className="bg-white rounded-lg p-4 border border-green-200 shadow-sm">
             <div className="text-sm text-gray-700 space-y-1">
+              <p>{analysisExplanations.performance || 'Performance analysis explanation is not available yet for this scan.'}</p>
               <p>LCP: {result.performance_results?.core_web_vitals?.lcp ?? 'N/A'} ms</p>
               <p>CLS: {result.performance_results?.core_web_vitals?.cls ?? 'N/A'}</p>
               <p>TTFB: N/A (not collected by current scanner)</p>
@@ -297,6 +300,8 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
             </div>
           </div>
           <div className="mt-4 bg-white rounded-lg p-4 border border-blue-200 shadow-sm text-sm text-gray-700 space-y-1">
+            <p><span className="font-medium">Accessibility explanation:</span> {analysisExplanations.accessibility || 'Accessibility analysis explanation is not available yet for this scan.'}</p>
+            <p><span className="font-medium">SEO explanation:</span> {analysisExplanations.seo || 'SEO analysis explanation is not available yet for this scan.'}</p>
             <p><span className="font-medium">SEO score explanation:</span> {result.seo_score ?? result.performance_results?.lighthouse_scores?.seo ?? 0}/100</p>
             <p>Missing meta tags: {seoMissingTags.length > 0 ? seoMissingTags.join(', ') : 'None detected'}</p>
             <p>Sitemap detected: {sitemapDetected === undefined ? 'Unknown' : sitemapDetected ? 'Yes' : 'No'}</p>
@@ -311,6 +316,7 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
           API Analysis Result
         </h3>
         <div className="text-sm text-gray-700 space-y-2">
+          <p>{analysisExplanations.api || 'API analysis explanation is not available yet for this scan.'}</p>
           <p><span className="font-medium">Status:</span> {result.api_results?.status || 'N/A'}</p>
           <p><span className="font-medium">Endpoints detected:</span> {result.api_results?.endpoints_detected ?? 0}</p>
           {(result.api_results?.endpoints_detected ?? 0) === 0 && (
@@ -331,6 +337,7 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
             </div>
           </div>
           <div className="bg-purple-50 rounded-lg p-4 border border-purple-200 shadow-sm text-sm text-gray-700 space-y-1">
+            <p>{analysisExplanations.e2e || 'E2E analysis explanation is not available yet for this scan.'}</p>
             <p>Buttons: {result.e2e_results.buttons_found ?? 0}, Links: {result.e2e_results.links_found ?? 0}, Forms: {result.e2e_results.forms_found ?? 0}</p>
             {(result.e2e_results.buttons_found ?? 0) + (result.e2e_results.links_found ?? 0) + (result.e2e_results.forms_found ?? 0) === 0 && (
               <p className="text-purple-800">No interactive elements were detected on the scanned page. The page may be static or rendered dynamically after load.</p>

@@ -83,6 +83,22 @@ Run continuously:
 npm run yslow:worker
 ```
 
+### 7. Schedule YSlow Worker in GitHub Actions
+
+A scheduled workflow is included at [.github/workflows/yslow-worker.yml](.github/workflows/yslow-worker.yml) and runs every 15 minutes.
+
+Set these repository secrets in GitHub:
+
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+
+Optional repository variables:
+
+- `YSLOW_WORKER_BATCH_SIZE` (default worker script value applies if empty)
+- `YSLOW_ASSET_SAMPLE_SIZE` (default worker script value applies if empty)
+
+You can also trigger it manually from **Actions → YSlow Worker → Run workflow**.
+
 ## How It Works
 
 1. **User Input**: User enters a website URL

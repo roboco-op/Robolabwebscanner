@@ -1501,6 +1501,7 @@ function buildFallbackExplanations(
       ? 'E2E analysis completed but no interactive elements were detected on the scanned page snapshot. The page may be static or interactions may render after client-side runtime.'
       : `E2E analysis completed with ${scanResults.e2e?.buttons_found || 0} buttons, ${scanResults.e2e?.links_found || 0} links, and ${scanResults.e2e?.forms_found || 0} forms detected.` ,
     seo: `SEO indicator analysis completed with score ${seoScore}/100. Missing meta tags: ${(seoResults.missing_meta_tags || []).length > 0 ? seoResults.missing_meta_tags?.join(', ') : 'none'}. Sitemap detected: ${seoResults.sitemap_detected === undefined ? 'unknown' : seoResults.sitemap_detected ? 'yes' : 'no'}. Structured data missing: ${seoResults.structured_data_missing === undefined ? 'unknown' : seoResults.structured_data_missing ? 'yes' : 'no'}.`,
+    yslow: `YSlow-style optimization review: prioritize image optimization, script reduction, caching headers, compression, and render-blocking resource cleanup to improve perceived and measured speed.`,
   };
 }
 
@@ -1537,14 +1538,14 @@ You are a web security and performance expert. Provide concise, actionable techn
 Provide:
 1. A brief 2-3 sentence technical summary
 2. Top 3-5 actionable recommendations
-3. Section-by-section explanations for: overall, security, performance, accessibility, api, e2e, seo
+3. Section-by-section explanations for: overall, security, performance, accessibility, api, e2e, seo, yslow
 
 SEO indicator facts:
 - Missing meta tags: ${(seoResults.missing_meta_tags || []).join(', ') || 'none'}
 - Sitemap detected: ${seoResults.sitemap_detected === undefined ? 'unknown' : seoResults.sitemap_detected ? 'yes' : 'no'}
 - Structured data missing: ${seoResults.structured_data_missing === undefined ? 'unknown' : seoResults.structured_data_missing ? 'yes' : 'no'}
 
-Format as JSON: {"summary": "...", "recommendations": ["...", "..."], "explanations": {"overall": "...", "security": "...", "performance": "...", "accessibility": "...", "api": "...", "e2e": "...", "seo": "..."}}`;
+Format as JSON: {"summary": "...", "recommendations": ["...", "..."], "explanations": {"overall": "...", "security": "...", "performance": "...", "accessibility": "...", "api": "...", "e2e": "...", "seo": "...", "yslow": "..."}}`;
 
     console.log("Sending request to Groq API...");
 

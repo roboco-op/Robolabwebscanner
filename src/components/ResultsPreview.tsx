@@ -133,6 +133,15 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
         </div>
       )}
 
+      {!isScanning && (
+        <div className="mb-8 bg-blue-50 rounded-lg border border-blue-200 p-5">
+          <h3 className="text-lg font-bold text-gray-900 mb-2">Overall Explanation</h3>
+          <p className="text-sm text-gray-700">
+            {analysisExplanations.overall || 'Overall analysis explanation is not available yet for this scan.'}
+          </p>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         {isScanning ? (
           <>
@@ -255,6 +264,7 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
           <div className="bg-white rounded-lg p-4 border border-green-200 shadow-sm">
             <div className="text-sm text-gray-700 space-y-1">
               <p>{analysisExplanations.performance || 'Performance analysis explanation is not available yet for this scan.'}</p>
+              <p><span className="font-medium">YSlow-style optimization explanation:</span> {analysisExplanations.yslow || 'YSlow-style explanation is not available yet for this scan.'}</p>
               <p>LCP: {result.performance_results?.core_web_vitals?.lcp ?? 'N/A'} ms</p>
               <p>CLS: {result.performance_results?.core_web_vitals?.cls ?? 'N/A'}</p>
               <p>TTFB: N/A (not collected by current scanner)</p>

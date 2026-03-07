@@ -418,6 +418,7 @@ function generateHTMLReport(scanResult: DBScanRow): string {
   <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
     <h2 style="color: #111827; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">⚡ Performance Result</h2>
     <p><strong>Explanation:</strong> ${explanations.performance}</p>
+    <p><strong>YSlow-style optimization explanation:</strong> ${explanations.yslow}</p>
     <p><strong>Status:</strong> ${performanceStatus || 'N/A'}</p>
     <p><strong>Score:</strong> <span style="color: ${scoreColor(scanResult.performance_results?.score || 0)};">${scanResult.performance_results?.score || 'N/A'}/100</span></p>
     <p><strong>LCP:</strong> ${scanResult.performance_results?.core_web_vitals?.lcp ?? 'N/A'} ms</p>
@@ -598,6 +599,7 @@ PERFORMANCE ANALYSIS
 
 Status: ${sr.performance_results?.status || 'N/A'}
 Explanation: ${explanations.performance}
+YSlow-style optimization explanation: ${explanations.yslow}
 Score: ${sr.performance_results?.score || 'N/A'}/100
 Load Time: ${sr.performance_results?.load_time_ms || 'N/A'}ms
 Page Size: ${sr.performance_results?.page_size_kb || 'N/A'}KB

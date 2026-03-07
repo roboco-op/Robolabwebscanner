@@ -161,7 +161,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (body.mode === "process-yslow") {
-      const yslowResult = await processYSlowSyncBatch(supabase);
+      const yslowResult = await processYSlowSyncBatch(supabase, body.scanId);
       return new Response(
         JSON.stringify({ success: true, ...yslowResult }),
         {
@@ -401,14 +401,21 @@ function buildYSlowFromStoredResults(scanRow: { performance_results?: Record<str
   };
 }
 
-async function processYSlowSyncBatch(supabase: ReturnType<typeof createClient>) {
-  const { data: pendingRows, error: fetchError } = await supabase
+async function processYSlowSyncBatch(supabase: ReturnType<typeof createClient>, targetScanId?: string) {
+  let query = supabase
     .from("scan_results")
     .select("id, target_url, performance_results, crawl_results, analysis_explanations")
     .eq("scan_status", "completed")
     .is("yslow_score", null)
-    .order("created_at", { ascending: true })
-    .limit(3);
+    .order("created_at", { ascending: true });
+
+  if (targetScanId) {
+    query = query.eq("id", targetScanId).limit(1);
+  } else {
+    query = query.limit(3);
+  }
+
+  const { data: pendingRows, error: fetchError } = await query;
 
   if (fetchError) {
     console.error("YSlow fetch error:", fetchError);
@@ -416,7 +423,7 @@ async function processYSlowSyncBatch(supabase: ReturnType<typeof createClient>) 
   }
 
   if (!pendingRows || pendingRows.length === 0) {
-    return { processed: 0, reason: "no_rows" };
+    return { processed: 0, reason: targetScanId ? "target_not_found_or_already_processed" : "no_rows" };
   }
 
   let processed = 0;

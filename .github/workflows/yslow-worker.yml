@@ -13,6 +13,12 @@ jobs:
   yslow-once:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_FALLBACK_TOKEN: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      YSLOW_WORKER_BATCH_SIZE: ${{ vars.YSLOW_WORKER_BATCH_SIZE }}
+      YSLOW_ASSET_SAMPLE_SIZE: ${{ vars.YSLOW_ASSET_SAMPLE_SIZE }}
 
     steps:
       - name: Checkout code
@@ -27,20 +33,34 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Validate required secrets
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      - name: Show credential presence
         run: |
-          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
-            echo "Missing required secrets: SUPABASE_URL and/or SUPABASE_SERVICE_ROLE_KEY"
+          [ -n "$SUPABASE_URL" ] && echo "SUPABASE_URL present" || echo "SUPABASE_URL missing"
+          [ -n "$SUPABASE_SERVICE_ROLE_KEY" ] && echo "SUPABASE_SERVICE_ROLE_KEY present" || echo "SUPABASE_SERVICE_ROLE_KEY missing"
+          [ -n "$SUPABASE_FALLBACK_TOKEN" ] && echo "SUPABASE_FALLBACK_TOKEN present" || echo "SUPABASE_FALLBACK_TOKEN missing"
+
+      - name: Validate available credentials
+        run: |
+          if [ -z "$SUPABASE_URL" ]; then
+            echo "Missing URL secret: set SUPABASE_URL or VITE_SUPABASE_URL"
             exit 1
           fi
 
-      - name: Run YSlow batch
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          YSLOW_WORKER_BATCH_SIZE: ${{ vars.YSLOW_WORKER_BATCH_SIZE }}
-          YSLOW_ASSET_SAMPLE_SIZE: ${{ vars.YSLOW_ASSET_SAMPLE_SIZE }}
-        run: npm run yslow:once
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ] && [ -z "$SUPABASE_FALLBACK_TOKEN" ]; then
+            echo "Missing auth secret: set SUPABASE_SERVICE_ROLE_KEY (preferred) or VITE_SUPABASE_ANON_KEY"
+            exit 1
+          fi
+
+      - name: Run YSlow Node worker (service role)
+        if: env.SUPABASE_SERVICE_ROLE_KEY != ''
+        run: node workers/yslow-worker.mjs --once
+
+      - name: Fallback trigger via Edge Function
+        if: env.SUPABASE_SERVICE_ROLE_KEY == ''
+        run: |
+          RESPONSE=$(curl -sS -X POST "$SUPABASE_URL/functions/v1/web-scanner" \
+            -H "Content-Type: application/json" \
+            -H "apikey: $SUPABASE_FALLBACK_TOKEN" \
+            -H "Authorization: Bearer $SUPABASE_FALLBACK_TOKEN" \
+            -d '{"mode":"process-yslow"}')
+          echo "Fallback response: $RESPONSE"

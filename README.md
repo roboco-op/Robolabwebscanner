@@ -89,8 +89,11 @@ A scheduled workflow is included at [.github/workflows/yslow-worker.yml](.github
 
 Set these repository secrets in GitHub:
 
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
+- `SUPABASE_URL` (or reuse `VITE_SUPABASE_URL`)
+- `SUPABASE_SERVICE_ROLE_KEY` (preferred)
+
+If `SUPABASE_SERVICE_ROLE_KEY` is not present, the workflow falls back to calling
+`web-scanner` with `VITE_SUPABASE_ANON_KEY` to run `mode: process-yslow`.
 
 Optional repository variables:
 

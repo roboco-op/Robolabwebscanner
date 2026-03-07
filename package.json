@@ -10,8 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "test:regenerate": "node test-regenerate.js",
-    "yslow:worker": "node workers/yslow-worker.mjs",
-    "yslow:once": "node workers/yslow-worker.mjs --once"
+    "yslow:worker": "node --env-file=.env.local workers/yslow-worker.mjs",
+    "yslow:once": "node --env-file=.env.local workers/yslow-worker.mjs --once"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",

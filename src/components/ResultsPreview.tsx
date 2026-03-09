@@ -57,6 +57,8 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
   const securityIssuesCount = result.security_results?.issues?.length ?? 0;
   const securityHeaderChecks = result.security_results?.header_checks ?? [];
   const securityRecommendations = result.security_results?.recommendations ?? [];
+  const mobilePerformanceScore = result.performance_results?.page_speed_by_environment?.mobile?.score;
+  const desktopPerformanceScore = result.performance_results?.page_speed_by_environment?.desktop?.score;
   const securityScore = result.security_checks_total
     ? Math.round(((result.security_checks_passed ?? 0) / result.security_checks_total) * 100)
     : 0;
@@ -170,12 +172,23 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
             <div className="bg-gray-50 rounded-lg shadow p-6 border-l-4 border-green-500">
               <div className="flex items-center justify-between mb-2">
                 <Zap className="w-8 h-8 text-green-600" />
-                <span className="text-3xl font-bold text-gray-900">
-                  {result.performance_score ?? result.performance_results?.score ?? 0}
-                </span>
+                {mobilePerformanceScore !== undefined || desktopPerformanceScore !== undefined ? (
+                  <div className="text-right">
+                    <div className="text-lg font-bold text-gray-900">M {mobilePerformanceScore ?? '—'}</div>
+                    <div className="text-lg font-bold text-gray-900">D {desktopPerformanceScore ?? '—'}</div>
+                  </div>
+                ) : (
+                  <span className="text-3xl font-bold text-gray-900">
+                    {result.performance_score ?? result.performance_results?.score ?? 0}
+                  </span>
+                )}
               </div>
               <p className="text-sm font-medium text-gray-600">Performance</p>
-              <p className="text-xs text-gray-500 mt-1">Lighthouse Mobile Score</p>
+              <p className="text-xs text-gray-500 mt-1">
+                {mobilePerformanceScore !== undefined || desktopPerformanceScore !== undefined
+                  ? 'PageSpeed: Mobile (M) and Desktop (D)'
+                  : 'Lighthouse Mobile Score'}
+              </p>
             </div>
 
             <div className="bg-gray-50 rounded-lg shadow p-6 border-l-4 border-orange-500">

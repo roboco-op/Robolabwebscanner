@@ -40,7 +40,7 @@ function scoreToGrade(score) {
 }
 
 function buildYSlowExplanation(result) {
-  return `YSlow-compatible analysis score is ${result.overall_score}/100 (grade ${result.grade}). Main pressure points are request volume (${result.metrics.total_requests}), caching (${result.rule_scores.caching}/100), and compression (${result.rule_scores.compression}/100).`;
+  return `Structure Score is ${result.overall_score}/100 (grade ${result.grade}). Best-Practice Optimization Score highlights request volume (${result.metrics.total_requests}), caching (${result.rule_scores.caching}/100), and compression (${result.rule_scores.compression}/100).`;
 }
 
 async function fetchAssetHeader(assetUrl) {
@@ -130,6 +130,7 @@ async function analyzeYSlowCompatible(targetUrl, crawlResults) {
     const encoding = (mainHeaders.get('content-encoding') || '').toLowerCase();
     return encoding.includes('gzip') || encoding.includes('br');
   })();
+  const mainDocumentNeedsImprovement = !compressedMainDoc;
 
   const cookieBytes = (() => {
     const setCookie = mainHeaders.get('set-cookie') || '';
@@ -181,7 +182,7 @@ async function analyzeYSlowCompatible(targetUrl, crawlResults) {
       stylesheets: stylesheets.length,
       images: images.length,
       redirects,
-      compressed_main_doc: compressedMainDoc,
+      compressed_main_doc: mainDocumentNeedsImprovement,
       avg_asset_cache_ttl_seconds: avgCacheTtl,
       minified_asset_ratio: Number(minifiedRatio.toFixed(3)),
       cookie_bytes: cookieBytes,

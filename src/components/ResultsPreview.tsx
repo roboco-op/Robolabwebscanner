@@ -218,8 +218,8 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
                   {result.yslow_score ?? (isScanning ? '—' : 0)}
                 </span>
               </div>
-              <p className="text-sm font-medium text-gray-600">YSlow</p>
-              <p className="text-xs text-gray-500 mt-1">Compatibility score</p>
+              <p className="text-sm font-medium text-gray-600">Structure Score</p>
+              <p className="text-xs text-gray-500 mt-1">Best-Practice Optimization Score</p>
             </div>
           </>
         )}
@@ -276,7 +276,7 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
           <div className="bg-white rounded-lg p-4 border border-green-200 shadow-sm">
             <div className="text-sm text-gray-700 space-y-1">
               <p>{analysisExplanations.performance || 'Performance analysis explanation is not available yet for this scan.'}</p>
-              <p><span className="font-medium">YSlow-style optimization explanation:</span> {analysisExplanations.yslow || 'YSlow-style explanation is not available yet for this scan.'}</p>
+              <p><span className="font-medium">Structure Score explanation:</span> {analysisExplanations.yslow || 'Structure Score explanation is not available yet for this scan.'}</p>
               <p>LCP: {result.performance_results?.core_web_vitals?.lcp ?? 'N/A'} ms</p>
               <p>CLS: {result.performance_results?.core_web_vitals?.cls ?? 'N/A'}</p>
               <p>TTFB: N/A (not collected by current scanner)</p>
@@ -371,14 +371,21 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
       <div className="bg-indigo-50 rounded-lg p-6 mb-8 border border-indigo-200">
         <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
           <BarChart3 className="w-5 h-5 text-indigo-600" />
-          YSlow Compatibility Result
+          Structure Score Result
         </h3>
         <div className="text-sm text-gray-700 space-y-2">
-          <p>{analysisExplanations.yslow || 'YSlow-style explanation is not available yet for this scan.'}</p>
-          <p><span className="font-medium">YSlow score:</span> {result.yslow_score ?? 0}/100</p>
+          <p>{analysisExplanations.yslow || 'Structure Score explanation is not available yet for this scan.'}</p>
+          <p><span className="font-medium">Structure Score:</span> {result.yslow_score ?? 0}/100</p>
+          <p><span className="font-medium">Best-Practice Optimization Score:</span> {result.yslow_score ?? 0}/100</p>
           <p><span className="font-medium">Grade:</span> {result.yslow_results?.grade || 'N/A'}</p>
+          <p><span className="font-medium">Checked at:</span> {result.yslow_results?.checked_at ? new Date(result.yslow_results.checked_at).toLocaleString() : 'N/A'}</p>
           <p><span className="font-medium">Total requests:</span> {result.yslow_results?.metrics?.total_requests ?? 'N/A'}</p>
+          <p><span className="font-medium">Average load time (ms):</span> {result.yslow_results?.metrics?.avg_load_time_ms ?? 'N/A'}</p>
+          <p><span className="font-medium">Main document/code needs improvement:</span> {result.yslow_results?.metrics?.compressed_main_doc === undefined ? 'N/A' : result.yslow_results.metrics.compressed_main_doc ? 'Yes' : 'No'}</p>
+          <p><span className="font-medium">Minified asset ratio:</span> {result.yslow_results?.metrics?.minified_asset_ratio ?? 'N/A'}</p>
           <p><span className="font-medium">Avg asset cache TTL (seconds):</span> {result.yslow_results?.metrics?.avg_asset_cache_ttl_seconds ?? 'N/A'}</p>
+          <p><span className="font-medium">Rule scores:</span> caching {result.yslow_results?.rule_scores?.caching ?? 'N/A'}, cookies {result.yslow_results?.rule_scores?.cookies ?? 'N/A'}, requests {result.yslow_results?.rule_scores?.requests ?? 'N/A'}, redirects {result.yslow_results?.rule_scores?.redirects ?? 'N/A'}, compression {result.yslow_results?.rule_scores?.compression ?? 'N/A'}, minification {result.yslow_results?.rule_scores?.minification ?? 'N/A'}</p>
+          <p><span className="font-medium">Recommendations:</span> {result.yslow_results?.recommendations && result.yslow_results.recommendations.length > 0 ? result.yslow_results.recommendations.join(' | ') : 'N/A'}</p>
         </div>
       </div>
 

@@ -235,7 +235,7 @@ function getAnalysisExplanations(scanResult: DBScanRow): Required<NonNullable<DB
       ? 'E2E analysis completed but no interactive elements were detected on the scanned page snapshot.'
       : `E2E analysis completed with ${scanResult.e2e_results?.buttons_found || 0} button(s), ${scanResult.e2e_results?.links_found || 0} link(s), and ${scanResult.e2e_results?.forms_found || 0} form(s).`,
     seo: `SEO analysis completed with score ${scanResult.seo_score ?? scanResult.performance_results?.lighthouse_scores?.seo ?? 0}/100. Missing meta tags: ${seo.missing_meta_tags.length > 0 ? seo.missing_meta_tags.join(', ') : 'none'}. Sitemap: ${seo.sitemap_detected === undefined ? 'unknown' : seo.sitemap_detected ? 'yes' : 'no'}. Structured data missing: ${seo.structured_data_missing === undefined ? 'unknown' : seo.structured_data_missing ? 'yes' : 'no'}.`,
-    yslow: typeof raw.yslow === 'string' && raw.yslow.trim().length > 0 ? raw.yslow : 'YSlow-style optimization notes are not separately available in this scan.',
+    yslow: typeof raw.yslow === 'string' && raw.yslow.trim().length > 0 ? raw.yslow : 'Structure Score optimization notes are not separately available in this scan.',
   };
 
   return {
@@ -318,7 +318,7 @@ function generateHTMLReport(scanResult: DBScanRow): string {
               <br/>
               <font face="Arial, Helvetica, sans-serif" color="#111827" style="font-size:16px;letter-spacing:0.5px;">Comprehensive Scanned Analysis</font>
               <br/>
-              <a href="https://www.webscanner.robo-lab.io" style="display:inline-block;margin-top:14px;font-family:Arial, Helvetica, sans-serif;font-size:18px;color:#111827;text-decoration:none;font-weight:600;">🌐 www.webscanner.robo-lab.io</a>
+              <a href="https://webscanner.robo-lab.io" style="display:inline-block;margin-top:14px;font-family:Arial, Helvetica, sans-serif;font-size:18px;color:#111827;text-decoration:none;font-weight:600;">🌐 https://webscanner.robo-lab.io</a>
             </td>
           </tr>
         </table>
@@ -354,7 +354,7 @@ function generateHTMLReport(scanResult: DBScanRow): string {
         <td style="padding: 10px 0; color: #111827; text-transform: capitalize;">${getDetectedEnvironment(scanResult)}</td>
       </tr>
       <tr>
-        <td style="padding: 10px 0; font-weight: 600; color: #6b7280;">YSlow Score:</td>
+        <td style="padding: 10px 0; font-weight: 600; color: #6b7280;">Structure Score:</td>
         <td style="padding: 10px 0; color: #111827;">${scanResult.yslow_score ?? 'N/A'}</td>
       </tr>
       <tr>
@@ -422,7 +422,7 @@ function generateHTMLReport(scanResult: DBScanRow): string {
   <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
     <h2 style="color: #111827; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">⚡ Performance Result</h2>
     <p><strong>Explanation:</strong> ${explanations.performance}</p>
-    <p><strong>YSlow-style optimization explanation:</strong> ${explanations.yslow}</p>
+    <p><strong>Structure Score explanation:</strong> ${explanations.yslow}</p>
     <p><strong>Status:</strong> ${performanceStatus || 'N/A'}</p>
     <p><strong>Score:</strong> <span style="color: ${scoreColor(scanResult.performance_results?.score || 0)};">${scanResult.performance_results?.score || 'N/A'}/100</span></p>
     <p><strong>LCP:</strong> ${scanResult.performance_results?.core_web_vitals?.lcp ?? 'N/A'} ms</p>
@@ -449,11 +449,18 @@ function generateHTMLReport(scanResult: DBScanRow): string {
   </div>
 
   <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-    <h2 style="color: #111827; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">🚀 YSlow Compatibility Result</h2>
-    <p><strong>Score:</strong> ${scanResult.yslow_score ?? 'N/A'}/100</p>
+    <h2 style="color: #111827; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">🚀 Structure Score Result</h2>
+    <p><strong>Structure Score:</strong> ${scanResult.yslow_score ?? 'N/A'}/100</p>
+    <p><strong>Best-Practice Optimization Score:</strong> ${scanResult.yslow_score ?? 'N/A'}/100</p>
     <p><strong>Grade:</strong> ${((scanResult.yslow_results || {}) as Record<string, unknown>).grade || 'N/A'}</p>
+    <p><strong>Checked at:</strong> ${((scanResult.yslow_results || {}) as Record<string, unknown>).checked_at || 'N/A'}</p>
     <p><strong>Total requests:</strong> ${(((scanResult.yslow_results || {}) as Record<string, unknown>).metrics as Record<string, unknown> | undefined)?.total_requests ?? 'N/A'}</p>
+    <p><strong>Average load time (ms):</strong> ${(((scanResult.yslow_results || {}) as Record<string, unknown>).metrics as Record<string, unknown> | undefined)?.avg_load_time_ms ?? 'N/A'}</p>
+    <p><strong>Main document/code needs improvement:</strong> ${(((scanResult.yslow_results || {}) as Record<string, unknown>).metrics as Record<string, unknown> | undefined)?.compressed_main_doc === undefined ? 'N/A' : (((scanResult.yslow_results || {}) as Record<string, unknown>).metrics as Record<string, unknown>).compressed_main_doc ? 'Yes' : 'No'}</p>
+    <p><strong>Minified asset ratio:</strong> ${(((scanResult.yslow_results || {}) as Record<string, unknown>).metrics as Record<string, unknown> | undefined)?.minified_asset_ratio ?? 'N/A'}</p>
     <p><strong>Average cache TTL (seconds):</strong> ${(((scanResult.yslow_results || {}) as Record<string, unknown>).metrics as Record<string, unknown> | undefined)?.avg_asset_cache_ttl_seconds ?? 'N/A'}</p>
+    <p><strong>Rule scores:</strong> caching ${(((scanResult.yslow_results || {}) as Record<string, unknown>).rule_scores as Record<string, unknown> | undefined)?.caching ?? 'N/A'}, cookies ${(((scanResult.yslow_results || {}) as Record<string, unknown>).rule_scores as Record<string, unknown> | undefined)?.cookies ?? 'N/A'}, requests ${(((scanResult.yslow_results || {}) as Record<string, unknown>).rule_scores as Record<string, unknown> | undefined)?.requests ?? 'N/A'}, redirects ${(((scanResult.yslow_results || {}) as Record<string, unknown>).rule_scores as Record<string, unknown> | undefined)?.redirects ?? 'N/A'}, compression ${(((scanResult.yslow_results || {}) as Record<string, unknown>).rule_scores as Record<string, unknown> | undefined)?.compression ?? 'N/A'}, minification ${(((scanResult.yslow_results || {}) as Record<string, unknown>).rule_scores as Record<string, unknown> | undefined)?.minification ?? 'N/A'}</p>
+    <p><strong>Recommendations:</strong> ${Array.isArray(((scanResult.yslow_results || {}) as Record<string, unknown>).recommendations) && (((scanResult.yslow_results || {}) as Record<string, unknown>).recommendations as unknown[]).length > 0 ? (((scanResult.yslow_results || {}) as Record<string, unknown>).recommendations as unknown[]).map((item) => String(item)).join(' | ') : 'N/A'}</p>
   </div>
 
   ${(Array.isArray(scanResult.crawl_results) && scanResult.crawl_results.length > 0) ? `
@@ -584,7 +591,7 @@ Scan Duration: ${sr.scan_duration_ms ? `${Math.max(1, Math.round(sr.scan_duratio
 Pages Scanned: ${sr.pages_scanned || 1}
 Scan Depth: ${sr.scan_depth || 1}
 Environment: ${getDetectedEnvironment(sr)}
-YSlow Score: ${sr.yslow_score ?? 'N/A'}/100
+Structure Score: ${sr.yslow_score ?? 'N/A'}/100
 Overall Score: ${sr.overall_score}/100
 Overall Explanation: ${explanations.overall}
 
@@ -626,7 +633,7 @@ PERFORMANCE ANALYSIS
 
 Status: ${sr.performance_results?.status || 'N/A'}
 Explanation: ${explanations.performance}
-YSlow-style optimization explanation: ${explanations.yslow}
+Structure Score explanation: ${explanations.yslow}
 Score: ${sr.performance_results?.score || 'N/A'}/100
 Load Time: ${sr.performance_results?.load_time_ms || 'N/A'}ms
 Page Size: ${sr.performance_results?.page_size_kb || 'N/A'}KB
@@ -699,14 +706,21 @@ Primary Actions:
 ${sr.e2e_results?.primary_actions ? sr.e2e_results.primary_actions.map((action: string, idx: number) => `  ${idx + 1}. ${action}`).join('\n') : '  None'}
 
 -------------------------------------------------
-YSLOW COMPATIBILITY RESULT
+STRUCTURE SCORE RESULT
 -------------------------------------------------
 
-Score: ${sr.yslow_score ?? 'N/A'}/100
+Structure Score: ${sr.yslow_score ?? 'N/A'}/100
+Best-Practice Optimization Score: ${sr.yslow_score ?? 'N/A'}/100
 Grade: ${((sr.yslow_results || {}) as Record<string, unknown>).grade || 'N/A'}
+Checked At: ${((sr.yslow_results || {}) as Record<string, unknown>).checked_at || 'N/A'}
 Total Requests: ${(((sr.yslow_results || {}) as Record<string, unknown>).metrics as Record<string, unknown> | undefined)?.total_requests ?? 'N/A'}
+Average Load Time (ms): ${(((sr.yslow_results || {}) as Record<string, unknown>).metrics as Record<string, unknown> | undefined)?.avg_load_time_ms ?? 'N/A'}
+Main Document/Code Needs Improvement: ${(((sr.yslow_results || {}) as Record<string, unknown>).metrics as Record<string, unknown> | undefined)?.compressed_main_doc === undefined ? 'N/A' : (((sr.yslow_results || {}) as Record<string, unknown>).metrics as Record<string, unknown>).compressed_main_doc ? 'Yes' : 'No'}
+Minified Asset Ratio: ${(((sr.yslow_results || {}) as Record<string, unknown>).metrics as Record<string, unknown> | undefined)?.minified_asset_ratio ?? 'N/A'}
 Average Cache TTL (seconds): ${(((sr.yslow_results || {}) as Record<string, unknown>).metrics as Record<string, unknown> | undefined)?.avg_asset_cache_ttl_seconds ?? 'N/A'}
-YSlow Explanation: ${explanations.yslow}
+Rule Scores: caching ${(((sr.yslow_results || {}) as Record<string, unknown>).rule_scores as Record<string, unknown> | undefined)?.caching ?? 'N/A'}, cookies ${(((sr.yslow_results || {}) as Record<string, unknown>).rule_scores as Record<string, unknown> | undefined)?.cookies ?? 'N/A'}, requests ${(((sr.yslow_results || {}) as Record<string, unknown>).rule_scores as Record<string, unknown> | undefined)?.requests ?? 'N/A'}, redirects ${(((sr.yslow_results || {}) as Record<string, unknown>).rule_scores as Record<string, unknown> | undefined)?.redirects ?? 'N/A'}, compression ${(((sr.yslow_results || {}) as Record<string, unknown>).rule_scores as Record<string, unknown> | undefined)?.compression ?? 'N/A'}, minification ${(((sr.yslow_results || {}) as Record<string, unknown>).rule_scores as Record<string, unknown> | undefined)?.minification ?? 'N/A'}
+Recommendations: ${Array.isArray(((sr.yslow_results || {}) as Record<string, unknown>).recommendations) && (((sr.yslow_results || {}) as Record<string, unknown>).recommendations as unknown[]).length > 0 ? (((sr.yslow_results || {}) as Record<string, unknown>).recommendations as unknown[]).map((item) => String(item)).join(' | ') : 'N/A'}
+Structure Score Explanation: ${explanations.yslow}
 
 -------------------------------------------------
 CRAWLED PAGES

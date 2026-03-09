@@ -131,6 +131,7 @@ export interface YSlowResults {
   };
   metrics?: {
     total_requests?: number;
+    avg_load_time_ms?: number;
     scripts?: number;
     stylesheets?: number;
     images?: number;

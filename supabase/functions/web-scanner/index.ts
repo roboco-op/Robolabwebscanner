@@ -345,6 +345,7 @@ function buildYSlowFromStoredResults(scanRow: { performance_results?: Record<str
   const images = Number(performance.images_count || performance.image_count || 0);
   const totalRequests = Math.max(1, scripts + stylesheets + images + 1);
   const compressed = Boolean(performance.compression_enabled);
+  const mainDocumentNeedsImprovement = !compressed;
   const cached = Boolean(performance.caching_enabled);
   const redirects = 0;
 
@@ -385,7 +386,7 @@ function buildYSlowFromStoredResults(scanRow: { performance_results?: Record<str
       stylesheets,
       images,
       redirects,
-      compressed_main_doc: compressed,
+      compressed_main_doc: mainDocumentNeedsImprovement,
       avg_asset_cache_ttl_seconds: cached ? 86400 : 0,
       minified_asset_ratio: scripts > 0 ? 0.65 : 1,
       cookie_bytes: 0,
@@ -439,7 +440,7 @@ async function processYSlowSyncBatch(supabase: ReturnType<typeof createClient>, 
         yslow_results: yslow,
         analysis_explanations: {
           ...(existingExplanations || {}),
-          yslow: `YSlow-compatible analysis score is ${yslow.overall_score}/100 (grade ${yslow.grade}). Main pressure points are request volume (${yslow.metrics.total_requests}), caching (${yslow.rule_scores.caching}/100), and compression (${yslow.rule_scores.compression}/100).`,
+          yslow: `Structure Score is ${yslow.overall_score}/100 (grade ${yslow.grade}). Best-Practice Optimization Score highlights request volume (${yslow.metrics.total_requests}), caching (${yslow.rule_scores.caching}/100), and compression (${yslow.rule_scores.compression}/100).`,
         },
       })
       .eq("id", (row as Record<string, unknown>).id as string);

@@ -22,6 +22,19 @@ type SecurityResults = {
   checks_performed: number;
   checks_passed: number;
   https_enabled: boolean;
+  protocol?: string;
+  score?: number;
+  security_headers?: Record<string, string>;
+  header_checks?: Array<{
+    header: string;
+    purpose: string;
+    present: boolean;
+    value?: string;
+    severity: 'high' | 'medium' | 'low';
+    recommendation: string;
+  }>;
+  recommendations?: string[];
+  scanner_engine?: string;
 };
 
 type AccessibilityResults = {
@@ -118,6 +131,10 @@ const corsHeaders = {
   "X-Content-Type-Options": "nosniff",
   "Permissions-Policy": "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()",
   "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Cross-Origin-Opener-Policy": "same-origin",
+  "Cross-Origin-Embedder-Policy": "require-corp",
+  "Cross-Origin-Resource-Policy": "same-origin",
+  "Cache-Control": "no-store",
 };
 
 interface ScanRequest {
@@ -588,7 +605,8 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
     const seoScore = scanResults.performance?.lighthouse_scores?.seo || 0;
     const accessibilityIssueCount = scanResults.accessibility?.total_issues || 0;
     const securityIssues = scanResults.security?.issues || [];
-    const securityChecksPassed = Math.max(0, 7 - securityIssues.length);
+    const securityChecksTotal = scanResults.security?.checks_performed || 12;
+    const securityChecksPassed = scanResults.security?.checks_passed ?? Math.max(0, securityChecksTotal - securityIssues.length);
     const technologies = scanResults.techStack?.detected?.map((t) => t.name) || [];
     const exposedEndpoints = scanResults.api?.endpoints?.map((e) => e.path) || [];
     const scanDurationMs = Date.now() - scanStartMs;
@@ -634,7 +652,7 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
         analysis_explanations: analysisExplanations,
         accessibility_issue_count: accessibilityIssueCount,
         security_checks_passed: securityChecksPassed,
-        security_checks_total: 7,
+        security_checks_total: securityChecksTotal,
         technologies: technologies,
         exposed_endpoints: exposedEndpoints,
         og_image: ogImage,
@@ -1203,46 +1221,111 @@ async function performSecurityScan(url: string): Promise<PipelineSection<Securit
     clearTimeout(timeoutId);
 
     const headers = response.headers;
-    const issues = [];
+    const issues: Array<{ severity: string; category?: string; description?: string; message?: string }> = [];
+    const securityHeaders: Record<string, string> = {};
 
-    if (!headers.get("strict-transport-security")) {
-      issues.push({
+    const cacheControl = (headers.get("cache-control") || "").toLowerCase();
+    const cacheControlSecure = cacheControl.includes("no-store") || cacheControl.includes("private") || cacheControl.includes("no-cache");
+
+    const headerChecks: NonNullable<SecurityResults["header_checks"]> = [
+      {
+        header: "Content-Security-Policy",
+        purpose: "Prevent XSS attacks",
+        present: !!headers.get("content-security-policy"),
+        value: headers.get("content-security-policy") || undefined,
         severity: "high",
-        category: "Security",
-        description: "Missing HSTS header - site vulnerable to protocol downgrade attacks"
-      });
-    }
-
-    if (!headers.get("x-content-type-options")) {
-      issues.push({
-        severity: "medium",
-        category: "Security",
-        description: "Missing X-Content-Type-Options header - vulnerable to MIME sniffing"
-      });
-    }
-
-    if (!headers.get("x-frame-options") && !headers.get("content-security-policy")) {
-      issues.push({
+        recommendation: "Add a strict CSP and avoid unsafe-inline/unsafe-eval where possible."
+      },
+      {
+        header: "Strict-Transport-Security",
+        purpose: "Enforce HTTPS",
+        present: !!headers.get("strict-transport-security"),
+        value: headers.get("strict-transport-security") || undefined,
         severity: "high",
-        category: "Security",
-        description: "Missing X-Frame-Options/CSP - vulnerable to clickjacking attacks"
-      });
-    }
-
-    const csp = headers.get("content-security-policy");
-    if (!csp) {
-      issues.push({
+        recommendation: "Add HSTS with max-age, includeSubDomains, and preload when eligible."
+      },
+      {
+        header: "X-Frame-Options",
+        purpose: "Prevent clickjacking",
+        present: !!headers.get("x-frame-options"),
+        value: headers.get("x-frame-options") || undefined,
+        severity: "high",
+        recommendation: "Set X-Frame-Options to DENY or SAMEORIGIN."
+      },
+      {
+        header: "X-Content-Type-Options",
+        purpose: "Prevent MIME sniffing",
+        present: (headers.get("x-content-type-options") || "").toLowerCase() === "nosniff",
+        value: headers.get("x-content-type-options") || undefined,
         severity: "medium",
-        category: "Security",
-        description: "No Content-Security-Policy - vulnerable to XSS attacks"
-      });
-    }
-
-    if (!headers.get("x-xss-protection")) {
-      issues.push({
+        recommendation: "Set X-Content-Type-Options to nosniff."
+      },
+      {
+        header: "Referrer-Policy",
+        purpose: "Protect referrer data",
+        present: !!headers.get("referrer-policy"),
+        value: headers.get("referrer-policy") || undefined,
+        severity: "medium",
+        recommendation: "Use strict-origin-when-cross-origin or stricter policies for privacy-sensitive flows."
+      },
+      {
+        header: "Permissions-Policy",
+        purpose: "Restrict browser APIs",
+        present: !!headers.get("permissions-policy"),
+        value: headers.get("permissions-policy") || undefined,
+        severity: "medium",
+        recommendation: "Restrict unused browser features (camera, microphone, geolocation, payment, usb)."
+      },
+      {
+        header: "Cross-Origin-Opener-Policy",
+        purpose: "Prevent cross-origin attacks",
+        present: !!headers.get("cross-origin-opener-policy"),
+        value: headers.get("cross-origin-opener-policy") || undefined,
+        severity: "medium",
+        recommendation: "Set COOP to same-origin for isolation when compatible with your app."
+      },
+      {
+        header: "Cross-Origin-Embedder-Policy",
+        purpose: "Secure resource isolation",
+        present: !!headers.get("cross-origin-embedder-policy"),
+        value: headers.get("cross-origin-embedder-policy") || undefined,
+        severity: "medium",
+        recommendation: "Set COEP to require-corp (or credentialless) when cross-origin isolation is required."
+      },
+      {
+        header: "Cross-Origin-Resource-Policy",
+        purpose: "Control resource sharing",
+        present: !!headers.get("cross-origin-resource-policy"),
+        value: headers.get("cross-origin-resource-policy") || undefined,
         severity: "low",
-        category: "Security",
-        description: "Missing X-XSS-Protection header"
+        recommendation: "Set CORP to same-origin or same-site for sensitive resources."
+      },
+      {
+        header: "Cache-Control",
+        purpose: "Prevent sensitive caching",
+        present: cacheControlSecure,
+        value: headers.get("cache-control") || undefined,
+        severity: "medium",
+        recommendation: "Use Cache-Control no-store/no-cache/private for sensitive or authenticated responses."
+      },
+    ];
+
+    for (const check of headerChecks) {
+      securityHeaders[check.header] = check.value || "";
+      if (!check.present) {
+        issues.push({
+          severity: check.severity,
+          category: "Security Header",
+          description: `Missing or weak ${check.header}: ${check.purpose}`,
+        });
+      }
+    }
+
+    if (!url.startsWith("https://")) {
+      issues.push({
+        severity: "high",
+        category: "Transport Security",
+        description: "Target URL is not HTTPS. TLS is required for production security.",
       });
     }
 
@@ -1257,11 +1340,25 @@ async function performSecurityScan(url: string): Promise<PipelineSection<Securit
       });
     }
 
+    const checksPerformed = headerChecks.length + 2;
+    const checksPassed = Math.max(0, checksPerformed - issues.length);
+    const recommendations = Array.from(new Set([
+      ...headerChecks.filter((check) => !check.present).map((check) => check.recommendation),
+      ...(url.startsWith("https://") ? [] : ["Redirect all HTTP traffic to HTTPS and enable TLS best-practice configuration."]),
+      ...(cookieMatches && cookieMatches.length > 0 ? ["Avoid document.cookie writes for sensitive session data; use HttpOnly/Secure cookies."] : []),
+    ]));
+
     return {
       issues,
-      checks_performed: 7,
-      checks_passed: 7 - issues.length,
+      checks_performed: checksPerformed,
+      checks_passed: checksPassed,
       https_enabled: url.startsWith("https"),
+      protocol: url.startsWith("https") ? "HTTPS" : "HTTP",
+      score: Math.round((checksPassed / Math.max(1, checksPerformed)) * 100),
+      security_headers: securityHeaders,
+      header_checks: headerChecks,
+      recommendations,
+      scanner_engine: "edge-fetch-header-scan",
       status: "completed",
     };
   } catch (error) {
@@ -1934,15 +2031,15 @@ function buildFallbackExplanations(
   seoResults: SEOResults,
 ): AnalysisExplanations {
   const securityIssues = scanResults.security?.issues?.length || 0;
-  const securityChecksPassed = scanResults.security?.checks_passed || Math.max(0, 7 - securityIssues);
-  const securityChecksTotal = scanResults.security?.checks_performed || 7;
+  const securityChecksPassed = scanResults.security?.checks_passed || Math.max(0, 12 - securityIssues);
+  const securityChecksTotal = scanResults.security?.checks_performed || 12;
   const securityScore = Math.round((securityChecksPassed / Math.max(1, securityChecksTotal)) * 100);
   const apiCount = scanResults.api?.endpoints_detected || 0;
   const e2eCount = (scanResults.e2e?.buttons_found || 0) + (scanResults.e2e?.links_found || 0) + (scanResults.e2e?.forms_found || 0);
 
   return {
     overall: `The scan for ${url} completed with an overall score of ${overallScore}/100. This summarizes security, performance, accessibility, API surface visibility, and interactive element coverage.` ,
-    security: `Basic security scan completed. ${securityIssues === 0 ? 'No immediate header-level security issues were detected.' : `${securityIssues} security issues were detected and should be remediated.`} Current security score is ${securityScore}/100 based on automated checks.`,
+    security: `Expanded security scan completed across transport, isolation, and header hardening checks. ${securityIssues === 0 ? 'No immediate header-level security issues were detected.' : `${securityIssues} security issue(s) were detected and should be remediated.`} Current security score is ${securityScore}/100 based on automated checks.`,
     performance: `Performance analysis completed with score ${scanResults.performance?.score || 0}/100. Load time was ${scanResults.performance?.load_time_ms || 0}ms and core metrics should be reviewed alongside optimization opportunities for scripts, images, and caching.`,
     accessibility: `Accessibility analysis completed with score ${scanResults.accessibility?.score || 0}/100 and ${scanResults.accessibility?.total_issues || 0} detected issues. Prioritize critical and serious findings first to improve usability and WCAG alignment.`,
     api: apiCount === 0

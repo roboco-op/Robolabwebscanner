@@ -55,6 +55,8 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
   const apiFailed = !isScanning && result.api_results?.status === 'failed';
   const e2eFailed = !isScanning && result.e2e_results?.status === 'failed';
   const securityIssuesCount = result.security_results?.issues?.length ?? 0;
+  const securityHeaderChecks = result.security_results?.header_checks ?? [];
+  const securityRecommendations = result.security_results?.recommendations ?? [];
   const securityScore = result.security_checks_total
     ? Math.round(((result.security_checks_passed ?? 0) / result.security_checks_total) * 100)
     : 0;
@@ -158,7 +160,7 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
               <div className="flex items-center justify-between mb-2">
                 <Shield className="w-8 h-8 text-red-600" />
                 <span className="text-3xl font-bold text-gray-900">
-                  {result.security_checks_passed !== undefined ? `${result.security_checks_passed}/${result.security_checks_total || 7}` : (result.scan_status === 'pending' || result.scan_status === 'processing') ? '—' : '0/7'}
+                  {result.security_checks_passed !== undefined ? `${result.security_checks_passed}/${result.security_checks_total || result.security_results?.checks_performed || 12}` : (result.scan_status === 'pending' || result.scan_status === 'processing') ? '—' : '0/12'}
                 </span>
               </div>
               <p className="text-sm font-medium text-gray-600">Security</p>
@@ -254,11 +256,34 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
         <div className="text-sm text-gray-700 space-y-2">
           <p>{analysisExplanations.security || 'Security analysis explanation is not available yet for this scan.'}</p>
           <p>
-            <span className="font-medium">Basic security scan completed:</span> {securityIssuesCount === 0 ? 'No security issues detected.' : `${securityIssuesCount} security issues detected.`}
+            <span className="font-medium">Expanded security scan completed:</span> {securityIssuesCount === 0 ? 'No security issues detected.' : `${securityIssuesCount} security issues detected.`}
           </p>
           <p>
             <span className="font-medium">Security score:</span> {securityScore}/100
           </p>
+          {securityHeaderChecks.length > 0 && (
+            <div className="mt-3 rounded-lg border border-red-200 bg-white p-3">
+              <p className="font-medium text-gray-800 mb-2">Header checks ({securityHeaderChecks.filter((check) => check.present).length}/{securityHeaderChecks.length} passed)</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {securityHeaderChecks.map((check) => (
+                  <div key={check.header} className="text-xs text-gray-700 flex items-start justify-between gap-2 border border-gray-100 rounded px-2 py-1">
+                    <span className="font-medium">{check.header}</span>
+                    <span className={check.present ? 'text-green-700 font-semibold' : 'text-red-700 font-semibold'}>{check.present ? 'PASS' : 'MISSING'}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {securityRecommendations.length > 0 && (
+            <div className="mt-3 rounded-lg border border-red-200 bg-white p-3">
+              <p className="font-medium text-gray-800 mb-2">Top recommendations</p>
+              <ul className="list-disc list-inside space-y-1">
+                {securityRecommendations.slice(0, 4).map((recommendation) => (
+                  <li key={recommendation} className="text-xs text-gray-700">{recommendation}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </div>
 

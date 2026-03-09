@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import type { ScanResult as DBScanRow, TopIssue, SecurityIssue, AccessibilityIssue, APIEndpoint } from '../../../src/types/scan';
+import type { ScanResult as DBScanRow, TopIssue, SecurityIssue, AccessibilityIssue, APIEndpoint, SecurityHeaderCheck } from '../../../src/types/scan';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,6 +12,10 @@ const corsHeaders = {
   "X-Content-Type-Options": "nosniff",
   "Permissions-Policy": "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()",
   "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Cross-Origin-Opener-Policy": "same-origin",
+  "Cross-Origin-Embedder-Policy": "require-corp",
+  "Cross-Origin-Resource-Policy": "same-origin",
+  "Cache-Control": "no-store",
 };
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
@@ -202,6 +206,43 @@ function getSecurityIssueText(issue: SecurityIssue): string {
   return issue.message || issue.description || 'No details provided';
 }
 
+function getSecurityHeaderChecks(scanResult: DBScanRow): SecurityHeaderCheck[] {
+  const existing = scanResult.security_results?.header_checks;
+  if (Array.isArray(existing) && existing.length > 0) {
+    return existing;
+  }
+
+  const fallbackPurposes: Record<string, { purpose: string; severity: 'high' | 'medium' | 'low'; recommendation: string }> = {
+    'Content-Security-Policy': { purpose: 'Prevent XSS attacks', severity: 'high', recommendation: 'Add a strict CSP policy.' },
+    'Strict-Transport-Security': { purpose: 'Enforce HTTPS', severity: 'high', recommendation: 'Add HSTS with max-age and includeSubDomains.' },
+    'X-Frame-Options': { purpose: 'Prevent clickjacking', severity: 'high', recommendation: 'Set X-Frame-Options to DENY or SAMEORIGIN.' },
+    'X-Content-Type-Options': { purpose: 'Prevent MIME sniffing', severity: 'medium', recommendation: 'Set X-Content-Type-Options to nosniff.' },
+    'Referrer-Policy': { purpose: 'Protect referrer data', severity: 'medium', recommendation: 'Set Referrer-Policy to strict-origin-when-cross-origin.' },
+    'Permissions-Policy': { purpose: 'Restrict browser APIs', severity: 'medium', recommendation: 'Restrict unneeded browser features.' },
+    'Cross-Origin-Opener-Policy': { purpose: 'Prevent cross-origin attacks', severity: 'medium', recommendation: 'Set COOP to same-origin.' },
+    'Cross-Origin-Embedder-Policy': { purpose: 'Secure resource isolation', severity: 'medium', recommendation: 'Set COEP to require-corp or credentialless.' },
+    'Cross-Origin-Resource-Policy': { purpose: 'Control resource sharing', severity: 'low', recommendation: 'Set CORP to same-origin/same-site as appropriate.' },
+    'Cache-Control': { purpose: 'Prevent sensitive caching', severity: 'medium', recommendation: 'Use no-store/no-cache/private on sensitive responses.' },
+  };
+
+  const rawHeaders = scanResult.security_results?.security_headers || {};
+  return Object.entries(rawHeaders).map(([header, value]) => {
+    const meta = fallbackPurposes[header] || {
+      purpose: 'Security hardening',
+      severity: 'low' as const,
+      recommendation: 'Review and harden this header configuration.',
+    };
+    return {
+      header,
+      purpose: meta.purpose,
+      present: typeof value === 'string' && value.trim().length > 0,
+      value: typeof value === 'string' ? value : undefined,
+      severity: meta.severity,
+      recommendation: meta.recommendation,
+    };
+  });
+}
+
 function getAccessibilityIssueText(issue: AccessibilityIssue): string {
   return issue.message || 'No details provided';
 }
@@ -282,6 +323,17 @@ function generateHTMLReport(scanResult: DBScanRow): string {
   const securityScore = getSecurityScore(scanResult);
   const securityProtocol = getSecurityProtocol(scanResult);
   const securityStatus = scanResult.security_results?.status;
+  const securityHeaderChecks = getSecurityHeaderChecks(scanResult);
+  const securityHeaderCheckRows = securityHeaderChecks.map((check) => `
+      <tr>
+        <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>${check.header}</strong><br/><span style="font-size: 12px; color: #6b7280;">${check.purpose}</span></td>
+        <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: ${check.present ? '#047857' : '#b91c1c'}; font-weight: 700;">${check.present ? 'PASS' : 'MISSING'}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${check.value || 'Missing'}</td>
+      </tr>
+    `).join('');
+  const securityRecommendations = (scanResult.security_results?.recommendations && scanResult.security_results.recommendations.length > 0)
+    ? scanResult.security_results.recommendations
+    : securityHeaderChecks.filter((check) => !check.present).map((check) => check.recommendation);
   const performanceStatus = scanResult.performance_results?.status;
   const accessibilityStatus = scanResult.accessibility_results?.status;
   const apiStatus = scanResult.api_results?.status;
@@ -408,10 +460,28 @@ function generateHTMLReport(scanResult: DBScanRow): string {
   <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
     <h2 style="color: #111827; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">🔒 Security Analysis</h2>
     <p><strong>Explanation:</strong> ${explanations.security}</p>
-    <p><strong>Status:</strong> Basic security scan completed (${securityStatus || 'N/A'})</p>
+    <p><strong>Status:</strong> Expanded security scan completed (${securityStatus || 'N/A'})</p>
     <p><strong>Security issues detected:</strong> ${scanResult.security_results?.issues?.length || 0}</p>
     <p><strong>Score:</strong> <span style="color: ${scoreColor(securityScore || 0)};">${securityScore ?? 'N/A'}/100</span></p>
     <p><strong>Protocol:</strong> ${securityProtocol}</p>
+    <p><strong>Checks passed:</strong> ${scanResult.security_results?.checks_passed ?? 0}/${scanResult.security_results?.checks_performed ?? securityHeaderChecks.length}</p>
+    <p><strong>Scanner engine:</strong> ${scanResult.security_results?.scanner_engine || 'N/A'}</p>
+
+    ${securityHeaderChecks.length > 0 ? `
+      <h3 style="color: #374151; font-size: 16px; margin-top: 20px;">Header Hardening Checks (Full Report):</h3>
+      <table style="width: 100%; border-collapse: collapse; margin-top: 8px;">
+        <thead>
+          <tr>
+            <th style="text-align: left; padding: 8px; border-bottom: 2px solid #d1d5db; color: #374151;">Header</th>
+            <th style="text-align: left; padding: 8px; border-bottom: 2px solid #d1d5db; color: #374151;">Status</th>
+            <th style="text-align: left; padding: 8px; border-bottom: 2px solid #d1d5db; color: #374151;">Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${securityHeaderCheckRows}
+        </tbody>
+      </table>
+    ` : '<p><strong>Header hardening checks:</strong> N/A</p>'}
     
     ${scanResult.security_results?.issues && scanResult.security_results.issues.length > 0 ? `
       <h3 style="color: #374151; font-size: 16px; margin-top: 20px;">Issues Found:</h3>
@@ -423,6 +493,13 @@ function generateHTMLReport(scanResult: DBScanRow): string {
         `).join('')}
       </ul>
     ` : '<p style="color: #10b981;">✓ No security issues detected</p>'}
+
+    ${securityRecommendations.length > 0 ? `
+      <h3 style="color: #374151; font-size: 16px; margin-top: 20px;">Security Recommendations:</h3>
+      <ul style="padding-left: 20px; color: #374151;">
+        ${securityRecommendations.map((item) => `<li style="margin-bottom: 6px;">${item}</li>`).join('')}
+      </ul>
+    ` : ''}
   </div>
 
   <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
@@ -583,6 +660,10 @@ function generateTextReport(scanResult: DBScanRow): string {
   const sr = scanResult;
   const securityScore = getSecurityScore(scanResult);
   const securityProtocol = getSecurityProtocol(scanResult);
+  const securityHeaderChecks = getSecurityHeaderChecks(scanResult);
+  const securityRecommendations = (sr.security_results?.recommendations && sr.security_results.recommendations.length > 0)
+    ? sr.security_results.recommendations
+    : securityHeaderChecks.filter((check) => !check.present).map((check) => check.recommendation);
   const seoResults = getSEOResults(scanResult);
   const explanations = getAnalysisExplanations(scanResult);
   const totalInteractiveElements = (sr.e2e_results?.buttons_found || 0) + (sr.e2e_results?.links_found || 0) + (sr.e2e_results?.forms_found || 0);
@@ -615,23 +696,24 @@ ${sr.top_issues!.indexOf(issue) + 1}. [${(issue.severity || '').toUpperCase()}] 
 SECURITY ANALYSIS
 -------------------------------------------------
 
-Status: Basic security scan completed (${sr.security_results?.status || 'N/A'})
+Status: Expanded security scan completed (${sr.security_results?.status || 'N/A'})
 Explanation: ${explanations.security}
 Security issues detected: ${sr.security_results?.issues?.length || 0}
 Score: ${securityScore ?? 'N/A'}/100
 Protocol: ${securityProtocol}
+Checks passed: ${sr.security_results?.checks_passed ?? 0}/${sr.security_results?.checks_performed ?? securityHeaderChecks.length}
+Scanner engine: ${sr.security_results?.scanner_engine || 'N/A'}
 
-Security Headers:
-${sr.security_results?.security_headers ? Object.entries(sr.security_results.security_headers).map(([key, value]) => `  - ${key}: ${value || 'Missing'}`).join('\n') : '  N/A'}
+Header Hardening Checks (Full Report):
+${securityHeaderChecks.length > 0 ? securityHeaderChecks.map((check, idx) => `  ${idx + 1}. ${check.header} [${check.present ? 'PASS' : 'MISSING'}]
+  Purpose: ${check.purpose}
+  Value: ${check.value || 'Missing'}`).join('\n') : '  N/A'}
 
 Issues Found:
 ${sr.security_results?.issues ? sr.security_results.issues.map((issue: SecurityIssue, idx: number) => `  ${idx + 1}. [${issue.severity}] ${getSecurityIssueText(issue)}`).join('\n') : '  None'}
 
 Recommendations:
-  - Implement HSTS with long max-age
-  - Add Content-Security-Policy header
-  - Enable Secure and HttpOnly flags on all cookies
-  - Implement X-Frame-Options and X-Content-Type-Options
+${securityRecommendations.length > 0 ? securityRecommendations.map((item) => `  - ${item}`).join('\n') : '  - No additional security recommendations at this time.'}
 
 -------------------------------------------------
 PERFORMANCE ANALYSIS

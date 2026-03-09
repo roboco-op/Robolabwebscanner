@@ -36,6 +36,15 @@ export interface SecurityIssue {
   message?: string;
 }
 
+export interface SecurityHeaderCheck {
+  header: string;
+  purpose: string;
+  present: boolean;
+  value?: string;
+  severity: 'high' | 'medium' | 'low';
+  recommendation: string;
+}
+
 export interface SecurityResults {
   issues?: SecurityIssue[];
   checks_performed?: number;
@@ -44,6 +53,9 @@ export interface SecurityResults {
   protocol?: string;
   score?: number;
   security_headers?: Record<string, string>;
+  header_checks?: SecurityHeaderCheck[];
+  recommendations?: string[];
+  scanner_engine?: string;
   status?: 'pending' | 'completed' | 'failed';
   error?: string;
 }

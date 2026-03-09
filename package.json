@@ -12,16 +12,20 @@
     "test:regenerate": "node test-regenerate.js",
     "yslow:worker": "node --env-file=.env.local workers/yslow-worker.mjs",
     "yslow:once": "node --env-file=.env.local workers/yslow-worker.mjs --once",
+    "security:deep": "node workers/deep-security-scan.mjs",
     "verify:scan-yslow": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-scan-yslow.ps1"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
+    "axios": "^1.13.6",
     "cheerio": "^1.1.2",
     "helmet": "^8.1.0",
     "lucide-react": "^0.344.0",
+    "puppeteer": "^24.38.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "recharts": "^3.7.0"
+    "recharts": "^3.7.0",
+    "wappalyzer": "^7.0.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.1",

@@ -10,6 +10,10 @@ const corsHeaders = {
   "X-Content-Type-Options": "nosniff",
   "Permissions-Policy": "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()",
   "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Cross-Origin-Opener-Policy": "same-origin",
+  "Cross-Origin-Embedder-Policy": "require-corp",
+  "Cross-Origin-Resource-Policy": "same-origin",
+  "Cache-Control": "no-store",
 };
 
 Deno.serve(async (req: Request) => {

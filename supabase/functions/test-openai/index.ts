@@ -13,6 +13,8 @@ const corsHeaders = {
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Embedder-Policy": "require-corp",
   "Cross-Origin-Resource-Policy": "same-origin",
+  "X-DNS-Prefetch-Control": "off",
+  "Origin-Agent-Cluster": "?1",
   "Cache-Control": "no-store",
 };
 

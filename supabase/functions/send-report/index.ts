@@ -15,6 +15,8 @@ const corsHeaders = {
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Embedder-Policy": "require-corp",
   "Cross-Origin-Resource-Policy": "same-origin",
+  "X-DNS-Prefetch-Control": "off",
+  "Origin-Agent-Cluster": "?1",
   "Cache-Control": "no-store",
 };
 
@@ -223,6 +225,14 @@ function getSecurityHeaderChecks(scanResult: DBScanRow): SecurityHeaderCheck[] {
     'Cross-Origin-Embedder-Policy': { purpose: 'Secure resource isolation', severity: 'medium', recommendation: 'Set COEP to require-corp or credentialless.' },
     'Cross-Origin-Resource-Policy': { purpose: 'Control resource sharing', severity: 'low', recommendation: 'Set CORP to same-origin/same-site as appropriate.' },
     'Cache-Control': { purpose: 'Prevent sensitive caching', severity: 'medium', recommendation: 'Use no-store/no-cache/private on sensitive responses.' },
+    'X-DNS-Prefetch-Control': { purpose: 'Control DNS prefetching privacy', severity: 'low', recommendation: 'Set X-DNS-Prefetch-Control to off on sensitive pages.' },
+    'Origin-Agent-Cluster': { purpose: 'Isolate origin memory/process model', severity: 'low', recommendation: 'Set Origin-Agent-Cluster to ?1 where supported.' },
+    'Access-Control-Allow-Origin scope': { purpose: 'CORS hardening policy scope', severity: 'medium', recommendation: 'Avoid wildcard ACAO for sensitive/authenticated APIs.' },
+    'Set-Cookie Secure flag': { purpose: 'Cookie transport confidentiality', severity: 'high', recommendation: 'Add Secure to all cookies.' },
+    'Set-Cookie HttpOnly flag': { purpose: 'Reduce script access to cookies', severity: 'high', recommendation: 'Add HttpOnly to session/auth cookies.' },
+    'Set-Cookie SameSite flag': { purpose: 'Mitigate CSRF/session leakage', severity: 'medium', recommendation: 'Set SameSite appropriately (Lax/Strict/None+Secure).' },
+    'Session fixation indicators': { purpose: 'Detect long-lived fixed session identifiers', severity: 'high', recommendation: 'Rotate session IDs on authentication and limit fixed lifetime IDs.' },
+    'TLS/HSTS quality': { purpose: 'Transport and certificate quality heuristic', severity: 'high', recommendation: 'Use HTTPS plus strong HSTS settings with includeSubDomains.' },
   };
 
   const rawHeaders = scanResult.security_results?.security_headers || {};

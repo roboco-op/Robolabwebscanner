@@ -134,6 +134,8 @@ const corsHeaders = {
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Embedder-Policy": "require-corp",
   "Cross-Origin-Resource-Policy": "same-origin",
+  "X-DNS-Prefetch-Control": "off",
+  "Origin-Agent-Cluster": "?1",
   "Cache-Control": "no-store",
 };
 
@@ -605,7 +607,7 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
     const seoScore = scanResults.performance?.lighthouse_scores?.seo || 0;
     const accessibilityIssueCount = scanResults.accessibility?.total_issues || 0;
     const securityIssues = scanResults.security?.issues || [];
-    const securityChecksTotal = scanResults.security?.checks_performed || 12;
+    const securityChecksTotal = scanResults.security?.checks_performed || 19;
     const securityChecksPassed = scanResults.security?.checks_passed ?? Math.max(0, securityChecksTotal - securityIssues.length);
     const technologies = scanResults.techStack?.detected?.map((t) => t.name) || [];
     const exposedEndpoints = scanResults.api?.endpoints?.map((e) => e.path) || [];
@@ -1226,6 +1228,30 @@ async function performSecurityScan(url: string): Promise<PipelineSection<Securit
 
     const cacheControl = (headers.get("cache-control") || "").toLowerCase();
     const cacheControlSecure = cacheControl.includes("no-store") || cacheControl.includes("private") || cacheControl.includes("no-cache");
+    const accessControlAllowOrigin = (headers.get("access-control-allow-origin") || "").trim();
+    const corsScoped = accessControlAllowOrigin.length === 0 || (accessControlAllowOrigin !== "*" && accessControlAllowOrigin.toLowerCase() !== "null");
+
+    const setCookieFallback = headers.get("set-cookie") || "";
+    const setCookieValues = setCookieFallback
+      ? setCookieFallback.split(/,(?=[^;,=]+=)/).map((value) => value.trim()).filter(Boolean)
+      : [];
+
+    const hasSetCookie = setCookieValues.length > 0;
+    const allCookiesSecure = !hasSetCookie || setCookieValues.every((cookie) => /;\s*secure\b/i.test(cookie));
+    const allCookiesHttpOnly = !hasSetCookie || setCookieValues.every((cookie) => /;\s*httponly\b/i.test(cookie));
+    const allCookiesSameSite = !hasSetCookie || setCookieValues.every((cookie) => /;\s*samesite=(lax|strict|none)\b/i.test(cookie));
+    const sessionFixationRisk = hasSetCookie && setCookieValues.some((cookie) => {
+      const hasSessionName = /(session|sessid|sid|token|auth)/i.test(cookie.split("=")[0] || "");
+      const hasLongLifetime = /;\s*(max-age=\d+|expires=)/i.test(cookie);
+      return hasSessionName && hasLongLifetime;
+    });
+
+    const hsts = headers.get("strict-transport-security") || "";
+    const hstsMaxAgeMatch = hsts.match(/max-age=(\d+)/i);
+    const hstsMaxAge = hstsMaxAgeMatch ? Number(hstsMaxAgeMatch[1]) : 0;
+    const hasIncludeSubDomains = /includesubdomains/i.test(hsts);
+    const hasPreload = /preload/i.test(hsts);
+    const tlsQualityStrong = url.startsWith("https://") && hstsMaxAge >= 31536000 && hasIncludeSubDomains;
 
     const headerChecks: NonNullable<SecurityResults["header_checks"]> = [
       {
@@ -1308,6 +1334,72 @@ async function performSecurityScan(url: string): Promise<PipelineSection<Securit
         severity: "medium",
         recommendation: "Use Cache-Control no-store/no-cache/private for sensitive or authenticated responses."
       },
+      {
+        header: "X-DNS-Prefetch-Control",
+        purpose: "Control DNS prefetching privacy",
+        present: !!headers.get("x-dns-prefetch-control"),
+        value: headers.get("x-dns-prefetch-control") || undefined,
+        severity: "low",
+        recommendation: "Set X-DNS-Prefetch-Control (typically 'off') on sensitive pages."
+      },
+      {
+        header: "Origin-Agent-Cluster",
+        purpose: "Isolate origin memory/process model",
+        present: !!headers.get("origin-agent-cluster"),
+        value: headers.get("origin-agent-cluster") || undefined,
+        severity: "low",
+        recommendation: "Set Origin-Agent-Cluster to ?1 to enforce origin-level process isolation where supported."
+      },
+      {
+        header: "Access-Control-Allow-Origin scope",
+        purpose: "CORS hardening policy scope",
+        present: corsScoped,
+        value: accessControlAllowOrigin || undefined,
+        severity: "medium",
+        recommendation: "Avoid wildcard ACAO for sensitive/authenticated APIs; allow only trusted origins."
+      },
+      {
+        header: "Set-Cookie Secure flag",
+        purpose: "Cookie transport confidentiality",
+        present: allCookiesSecure,
+        value: hasSetCookie ? (allCookiesSecure ? "All cookies secure" : "One or more cookies missing Secure") : "No Set-Cookie observed",
+        severity: "high",
+        recommendation: "Add Secure to all cookies so they are never sent over plaintext HTTP."
+      },
+      {
+        header: "Set-Cookie HttpOnly flag",
+        purpose: "Reduce script access to cookies",
+        present: allCookiesHttpOnly,
+        value: hasSetCookie ? (allCookiesHttpOnly ? "All cookies HttpOnly" : "One or more cookies missing HttpOnly") : "No Set-Cookie observed",
+        severity: "high",
+        recommendation: "Add HttpOnly to session/auth cookies to reduce XSS exfiltration risk."
+      },
+      {
+        header: "Set-Cookie SameSite flag",
+        purpose: "Mitigate CSRF/session leakage",
+        present: allCookiesSameSite,
+        value: hasSetCookie ? (allCookiesSameSite ? "All cookies include SameSite" : "One or more cookies missing SameSite") : "No Set-Cookie observed",
+        severity: "medium",
+        recommendation: "Set SameSite=Lax or Strict for most cookies; use None only when required with Secure."
+      },
+      {
+        header: "Session fixation indicators",
+        purpose: "Detect long-lived fixed session identifiers",
+        present: !sessionFixationRisk,
+        value: sessionFixationRisk ? "Potential risk detected in Set-Cookie attributes" : "No obvious session fixation indicator",
+        severity: "high",
+        recommendation: "Rotate session identifiers on authentication and avoid long-lived fixed session IDs."
+      },
+      {
+        header: "TLS/HSTS quality",
+        purpose: "Transport and certificate quality heuristic",
+        present: tlsQualityStrong,
+        value: url.startsWith("https://")
+          ? `hsts max-age=${hstsMaxAge || 0}${hasIncludeSubDomains ? '; includeSubDomains' : ''}${hasPreload ? '; preload' : ''}`
+          : "HTTP detected",
+        severity: "high",
+        recommendation: "Use HTTPS with strong TLS and HSTS (>=31536000, includeSubDomains, preload when possible)."
+      },
     ];
 
     for (const check of headerChecks) {
@@ -1340,7 +1432,7 @@ async function performSecurityScan(url: string): Promise<PipelineSection<Securit
       });
     }
 
-    const checksPerformed = headerChecks.length + 2;
+    const checksPerformed = headerChecks.length + 1;
     const checksPassed = Math.max(0, checksPerformed - issues.length);
     const recommendations = Array.from(new Set([
       ...headerChecks.filter((check) => !check.present).map((check) => check.recommendation),
@@ -2031,8 +2123,8 @@ function buildFallbackExplanations(
   seoResults: SEOResults,
 ): AnalysisExplanations {
   const securityIssues = scanResults.security?.issues?.length || 0;
-  const securityChecksPassed = scanResults.security?.checks_passed || Math.max(0, 12 - securityIssues);
-  const securityChecksTotal = scanResults.security?.checks_performed || 12;
+  const securityChecksPassed = scanResults.security?.checks_passed || Math.max(0, 19 - securityIssues);
+  const securityChecksTotal = scanResults.security?.checks_performed || 19;
   const securityScore = Math.round((securityChecksPassed / Math.max(1, securityChecksTotal)) * 100);
   const apiCount = scanResults.api?.endpoints_detected || 0;
   const e2eCount = (scanResults.e2e?.buttons_found || 0) + (scanResults.e2e?.links_found || 0) + (scanResults.e2e?.forms_found || 0);

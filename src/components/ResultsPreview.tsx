@@ -160,7 +160,7 @@ export default function ResultsPreview({ result, onEmailSubmit, onScanAnother }:
               <div className="flex items-center justify-between mb-2">
                 <Shield className="w-8 h-8 text-red-600" />
                 <span className="text-3xl font-bold text-gray-900">
-                  {result.security_checks_passed !== undefined ? `${result.security_checks_passed}/${result.security_checks_total || result.security_results?.checks_performed || 12}` : (result.scan_status === 'pending' || result.scan_status === 'processing') ? '—' : '0/12'}
+                  {result.security_checks_passed !== undefined ? `${result.security_checks_passed}/${result.security_checks_total || result.security_results?.checks_performed || 19}` : (result.scan_status === 'pending' || result.scan_status === 'processing') ? '—' : '0/19'}
                 </span>
               </div>
               <p className="text-sm font-medium text-gray-600">Security</p>

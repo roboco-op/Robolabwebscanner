@@ -24,6 +24,32 @@ export interface PerformanceResults {
   caching_enabled?: boolean;
   opportunities?: Array<{ title: string; description?: string; score?: number; savings?: number }>;
   diagnostics?: Array<{ title: string; description?: string }>;
+  page_speed_by_environment?: {
+    mobile?: {
+      score?: number;
+      load_time_ms?: number;
+      core_web_vitals?: {
+        fcp?: number;
+        lcp?: number;
+        tti?: number;
+        tbt?: number;
+        cls?: number;
+        speedIndex?: number;
+      };
+    };
+    desktop?: {
+      score?: number;
+      load_time_ms?: number;
+      core_web_vitals?: {
+        fcp?: number;
+        lcp?: number;
+        tti?: number;
+        tbt?: number;
+        cls?: number;
+        speedIndex?: number;
+      };
+    };
+  };
   source?: string;
   status?: 'pending' | 'completed' | 'failed';
   error?: string;

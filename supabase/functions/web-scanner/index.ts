@@ -13,6 +13,18 @@ type PerformanceResults = {
   lighthouse_scores?: { performance?: number; seo?: number; accessibility?: number; bestPractices?: number };
   core_web_vitals?: Record<string, number>;
   source?: string;
+  page_speed_by_environment?: {
+    mobile?: {
+      score?: number;
+      load_time_ms?: number;
+      core_web_vitals?: Record<string, number>;
+    };
+    desktop?: {
+      score?: number;
+      load_time_ms?: number;
+      core_web_vitals?: Record<string, number>;
+    };
+  };
   opportunities?: Array<{ title?: string; score?: number; savings?: number }>;
   diagnostics?: Array<{ title?: string; score?: number }>;
 };
@@ -612,7 +624,15 @@ async function processScan(scanId: string, url: string, supabase: ReturnType<typ
     const technologies = scanResults.techStack?.detected?.map((t) => t.name) || [];
     const exposedEndpoints = scanResults.api?.endpoints?.map((e) => e.path) || [];
     const scanDurationMs = Date.now() - scanStartMs;
-    const scanEnvironment = scanResults.performance?.source === 'google-pagespeed' ? 'mobile' : 'desktop';
+    const hasMobilePageSpeed = typeof scanResults.performance?.page_speed_by_environment?.mobile?.score === 'number';
+    const hasDesktopPageSpeed = typeof scanResults.performance?.page_speed_by_environment?.desktop?.score === 'number';
+    const scanEnvironment = hasMobilePageSpeed && hasDesktopPageSpeed
+      ? 'mobile+desktop'
+      : hasDesktopPageSpeed
+        ? 'desktop'
+        : hasMobilePageSpeed
+          ? 'mobile'
+          : (scanResults.performance?.source === 'google-pagespeed' ? 'mobile' : 'desktop');
 
     let aiSummary = null;
     let aiRecommendations = [];
@@ -1494,59 +1514,80 @@ async function performPerformanceScan(url: string): Promise<PipelineSection<Perf
 
 async function performGooglePageSpeedScan(url: string, apiKey: string): Promise<PipelineSection<PerformanceResults>> {
   try {
-    const pagespeedUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&key=${apiKey}&category=performance&category=accessibility&category=best-practices&category=seo`;
+    const callPageSpeed = async (strategy: 'mobile' | 'desktop') => {
+      const pagespeedUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&key=${apiKey}&category=performance&category=accessibility&category=best-practices&category=seo&strategy=${strategy}`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+      const response = await fetch(pagespeedUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
 
-    console.log("Calling Google PageSpeed Insights API...");
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000);
+      if (!response.ok) {
+        throw new Error(`PageSpeed API error (${strategy}): ${response.status}`);
+      }
 
-    const response = await fetch(pagespeedUrl, { signal: controller.signal });
-    clearTimeout(timeoutId);
+      const data = await response.json();
+      const lighthouseResult = data.lighthouseResult;
+      const categories = lighthouseResult.categories;
+      const audits = lighthouseResult.audits;
 
-    if (!response.ok) {
-      throw new Error(`PageSpeed API error: ${response.status}`);
-    }
+      const performanceScore = Math.round((categories.performance?.score || 0) * 100);
+      const accessibilityScore = Math.round((categories.accessibility?.score || 0) * 100);
+      const bestPracticesScore = Math.round((categories['best-practices']?.score || 0) * 100);
+      const seoScore = Math.round((categories.seo?.score || 0) * 100);
 
-    const data = await response.json();
-    const lighthouseResult = data.lighthouseResult;
-    const categories = lighthouseResult.categories;
-    const audits = lighthouseResult.audits;
+      const metrics = audits['metrics']?.details?.items?.[0] || {};
+      const fcp = metrics.firstContentfulPaint || 0;
+      const lcp = metrics.largestContentfulPaint || 0;
+      const tti = metrics.interactive || 0;
+      const tbt = metrics.totalBlockingTime || 0;
+      const cls = metrics.cumulativeLayoutShift || 0;
+      const speedIndex = metrics.speedIndex || 0;
 
-    const performanceScore = Math.round((categories.performance?.score || 0) * 100);
-    const accessibilityScore = Math.round((categories.accessibility?.score || 0) * 100);
-    const bestPracticesScore = Math.round((categories['best-practices']?.score || 0) * 100);
-    const seoScore = Math.round((categories.seo?.score || 0) * 100);
+      return {
+        score: performanceScore,
+        load_time_ms: Math.round(metrics.observedLoad || 0),
+        lighthouse_scores: {
+          performance: performanceScore,
+          accessibility: accessibilityScore,
+          bestPractices: bestPracticesScore,
+          seo: seoScore,
+        },
+        core_web_vitals: {
+          fcp: Math.round(fcp),
+          lcp: Math.round(lcp),
+          tti: Math.round(tti),
+          tbt: Math.round(tbt),
+          cls: Math.round(cls * 1000) / 1000,
+          speedIndex: Math.round(speedIndex),
+        },
+        image_count: audits['uses-optimized-images']?.details?.items?.length || 0,
+        compression_enabled: audits['uses-text-compression']?.score === 1,
+        caching_enabled: audits['uses-long-cache-ttl']?.score > 0.5,
+        opportunities: extractPageSpeedOpportunities(audits),
+        diagnostics: extractPageSpeedDiagnostics(audits),
+      };
+    };
 
-    const metrics = audits['metrics']?.details?.items?.[0] || {};
-    const fcp = metrics.firstContentfulPaint || 0;
-    const lcp = metrics.largestContentfulPaint || 0;
-    const tti = metrics.interactive || 0;
-    const tbt = metrics.totalBlockingTime || 0;
-    const cls = metrics.cumulativeLayoutShift || 0;
-    const speedIndex = metrics.speedIndex || 0;
+    console.log("Calling Google PageSpeed Insights API for mobile + desktop...");
+    const [mobileResult, desktopResult] = await Promise.all([
+      callPageSpeed('mobile'),
+      callPageSpeed('desktop'),
+    ]);
 
     return {
-      score: performanceScore,
-      load_time_ms: Math.round(metrics.observedLoad || 0),
-      lighthouse_scores: {
-        performance: performanceScore,
-        accessibility: accessibilityScore,
-        bestPractices: bestPracticesScore,
-        seo: seoScore,
+      ...mobileResult,
+      page_speed_by_environment: {
+        mobile: {
+          score: mobileResult.score,
+          load_time_ms: mobileResult.load_time_ms,
+          core_web_vitals: mobileResult.core_web_vitals,
+        },
+        desktop: {
+          score: desktopResult.score,
+          load_time_ms: desktopResult.load_time_ms,
+          core_web_vitals: desktopResult.core_web_vitals,
+        },
       },
-      core_web_vitals: {
-        fcp: Math.round(fcp),
-        lcp: Math.round(lcp),
-        tti: Math.round(tti),
-        tbt: Math.round(tbt),
-        cls: Math.round(cls * 1000) / 1000,
-        speedIndex: Math.round(speedIndex),
-      },
-      image_count: audits['uses-optimized-images']?.details?.items?.length || 0,
-      compression_enabled: audits['uses-text-compression']?.score === 1,
-      caching_enabled: audits['uses-long-cache-ttl']?.score > 0.5,
-      opportunities: extractPageSpeedOpportunities(audits),
-      diagnostics: extractPageSpeedDiagnostics(audits),
       source: "google-pagespeed",
       status: "completed",
     };

@@ -345,6 +345,8 @@ function generateHTMLReport(scanResult: DBScanRow): string {
     ? scanResult.security_results.recommendations
     : securityHeaderChecks.filter((check) => !check.present).map((check) => check.recommendation);
   const performanceStatus = scanResult.performance_results?.status;
+  const mobilePerformanceScore = scanResult.performance_results?.page_speed_by_environment?.mobile?.score;
+  const desktopPerformanceScore = scanResult.performance_results?.page_speed_by_environment?.desktop?.score;
   const accessibilityStatus = scanResult.accessibility_results?.status;
   const apiStatus = scanResult.api_results?.status;
   const e2eStatus = scanResult.e2e_results?.status;
@@ -517,6 +519,7 @@ function generateHTMLReport(scanResult: DBScanRow): string {
     <p><strong>Explanation:</strong> ${explanations.performance}</p>
     <p><strong>Structure Score explanation:</strong> ${explanations.yslow}</p>
     <p><strong>Status:</strong> ${performanceStatus || 'N/A'}</p>
+    <p><strong>Environment comparison:</strong> Mobile ${mobilePerformanceScore ?? 'N/A'}/100, Desktop ${desktopPerformanceScore ?? 'N/A'}/100</p>
     <p><strong>Score:</strong> <span style="color: ${scoreColor(scanResult.performance_results?.score || 0)};">${scanResult.performance_results?.score || 'N/A'}/100</span></p>
     <p><strong>LCP:</strong> ${scanResult.performance_results?.core_web_vitals?.lcp ?? 'N/A'} ms</p>
     <p><strong>CLS:</strong> ${scanResult.performance_results?.core_web_vitals?.cls ?? 'N/A'}</p>
@@ -674,6 +677,8 @@ function generateTextReport(scanResult: DBScanRow): string {
   const securityRecommendations = (sr.security_results?.recommendations && sr.security_results.recommendations.length > 0)
     ? sr.security_results.recommendations
     : securityHeaderChecks.filter((check) => !check.present).map((check) => check.recommendation);
+  const mobilePerformanceScore = sr.performance_results?.page_speed_by_environment?.mobile?.score;
+  const desktopPerformanceScore = sr.performance_results?.page_speed_by_environment?.desktop?.score;
   const seoResults = getSEOResults(scanResult);
   const explanations = getAnalysisExplanations(scanResult);
   const totalInteractiveElements = (sr.e2e_results?.buttons_found || 0) + (sr.e2e_results?.links_found || 0) + (sr.e2e_results?.forms_found || 0);
@@ -732,6 +737,7 @@ PERFORMANCE ANALYSIS
 Status: ${sr.performance_results?.status || 'N/A'}
 Explanation: ${explanations.performance}
 Structure Score explanation: ${explanations.yslow}
+Environment comparison: Mobile ${mobilePerformanceScore ?? 'N/A'}/100, Desktop ${desktopPerformanceScore ?? 'N/A'}/100
 Score: ${sr.performance_results?.score || 'N/A'}/100
 Load Time: ${sr.performance_results?.load_time_ms || 'N/A'}ms
 Page Size: ${sr.performance_results?.page_size_kb || 'N/A'}KB
